@@ -31,8 +31,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = 'BOT_TOKEN'
-OWM_API_KEY = 'OPENWEATHER_API_KEY'
+TOKEN = os.getenv("BOT_TOKEN")
+OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 DATA_FILE = 'user_data.json'
 
 if TOKEN == 'YOUR_BOT_TOKEN_HERE' or OWM_API_KEY == 'YOUR_API_KEY_HERE':
