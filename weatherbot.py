@@ -294,7 +294,7 @@ class DataManager:
             self.data[sid] = {
                 'language': 'en',
                 'notifications': True,
-                'notification_time': '08:00',
+                'notification_time': '20:00',
                 'saved_cities': [],
                 'timezone': 'UTC',
                 'last_activity': datetime.now().isoformat(),
@@ -1111,6 +1111,7 @@ def notification_scheduler():
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_notifications")
 def toggle_notifications(call):
     try:
+        bot.answer_callback_query(call.id)
         settings = data_manager.get_user_settings(call.message.chat.id)
         settings['notifications'] = not settings['notifications']
         data_manager.update_user_setting(call.message.chat.id, 'notifications', settings['notifications'])
@@ -1118,13 +1119,13 @@ def toggle_notifications(call):
         status = LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off']
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['notifications_status'].format(status=status))
         show_settings(call.message)  # Обновить меню
-        bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in toggle_notifications: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "set_notification_time")
 def request_notification_time(call):
     try:
+        bot.answer_callback_query(call.id)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
 
@@ -1133,7 +1134,6 @@ def request_notification_time(call):
             LANGUAGES[lang]['enter_notification_time_full']
         )
         bot.register_next_step_handler(msg, process_notification_time)
-        bot.answer_callback_query(call.id)
 
     except Exception as e:
         logger.error(f"Error in request_notification_time: {e}")
@@ -1162,6 +1162,7 @@ def process_notification_time(msg):
 @bot.callback_query_handler(func=lambda call: call.data == "change_language")
 def change_language_menu(call):
     try:
+        bot.answer_callback_query(call.id)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         markup = types.InlineKeyboardMarkup(row_width=3)
@@ -1177,7 +1178,6 @@ def change_language_menu(call):
             LANGUAGES[lang]['choose_language'],
             reply_markup=markup
         )
-        bot.answer_callback_query(call.id)
 
     except Exception as e:
         logger.error(f"Error in change_language_menu: {e}")
