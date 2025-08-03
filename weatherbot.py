@@ -1,37 +1,3 @@
-# --- Выбор города для уведомлений ---
-@bot.callback_query_handler(func=lambda call: call.data == "choose_notification_city")
-def choose_notification_city(call):
-    try:
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        saved_cities = settings.get('saved_cities', [])
-        if not saved_cities:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['no_saved_cities'])
-            return
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        for city in saved_cities:
-            markup.add(types.InlineKeyboardButton(city, callback_data=f"set_notification_city_{city}"))
-        safe_send_message(call.message.chat.id, "🔔 Выберите город для ежедневных уведомлений:", reply_markup=markup)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in choose_notification_city: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('set_notification_city_'))
-def set_notification_city(call):
-    try:
-        city = call.data.split('_', 3)[3]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        saved_cities = settings.get('saved_cities', [])
-        if city not in saved_cities:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
-            return
-        data_manager.update_user_setting(call.message.chat.id, 'notification_city', city)
-        safe_send_message(call.message.chat.id, f"✅ {city} теперь выбран для ежедневных уведомлений о прогнозе.")
-        show_settings(call.message)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in set_notification_city: {e}")
 import os
 import logging
 import matplotlib
@@ -545,6 +511,41 @@ def set_language(call):
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in set_language: {e}")
+
+# --- Выбор города для уведомлений ---
+@bot.callback_query_handler(func=lambda call: call.data == "choose_notification_city")
+def choose_notification_city(call):
+    try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        if not saved_cities:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['no_saved_cities'])
+            return
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for city in saved_cities:
+            markup.add(types.InlineKeyboardButton(city, callback_data=f"set_notification_city_{city}"))
+        safe_send_message(call.message.chat.id, "🔔 Выберите город для ежедневных уведомлений:", reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in choose_notification_city: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_notification_city_'))
+def set_notification_city(call):
+    try:
+        city = call.data.split('_', 3)[3]
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        if city not in saved_cities:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        data_manager.update_user_setting(call.message.chat.id, 'notification_city', city)
+        safe_send_message(call.message.chat.id, f"✅ {city} теперь выбран для ежедневных уведомлений о прогнозе.")
+        show_settings(call.message)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in set_notification_city: {e}")
 
 @bot.message_handler(content_types=['location'])
 def handle_location(msg):
