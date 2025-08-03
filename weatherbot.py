@@ -31,8 +31,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("BOT_TOKEN")
-OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+TOKEN = '8256727883:AAHk2paecc7KzkyGqwvuv3BEWd8R1Mq_PTQ'
+OWM_API_KEY = 'a9570d9508d57dc1c705ef6bbad533e4'
 DATA_FILE = 'user_data.json'
 
 if TOKEN == 'YOUR_BOT_TOKEN_HERE' or OWM_API_KEY == 'YOUR_API_KEY_HERE':
@@ -624,49 +624,32 @@ def handle_chart_city(call):
     except Exception as e:
         logger.error(f"Error in handle_chart_city: {e}")        
 
+
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
         saved_cities = settings.get('saved_cities', [])
         if not saved_cities:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
             return
-        
-        markup = types.InlineKeyboardMarkup(row_width=2)
+        # Для каждого города — отдельный блок с выбором даты
         for city in saved_cities:
-            markup.add(types.InlineKeyboardButton(
-                f"🌦️ {city}", callback_data=f"forecast_{city}"
-            ))
-        
-        safe_send_message(
-            msg.chat.id,
-            f"🌦️ {LANGUAGES[lang]['forecast_button']}",
-            reply_markup=markup
-        )
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            today = datetime.now()
+            for i in range(5):
+                date = today + timedelta(days=i)
+                date_str = date.strftime('%Y-%m-%d')
+                label = date.strftime('%d.%m (%a)')
+                markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
+            safe_send_message(
+                msg.chat.id,
+                f"🌦️ {city} — {LANGUAGES[lang]['select_date']}",
+                reply_markup=markup
+            )
     except Exception as e:
-        logger.error(f"Error in show_forecast_options: {e}")
-
-# --- После show_forecast_options ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
-def handle_forecast_city(call):
-    try:
-        city = call.data.split("_", 1)[1]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        today = datetime.now()
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        for i in range(5):
-            date = today + timedelta(days=i)
-            date_str = date.strftime('%Y-%m-%d')
-            label = date.strftime('%d.%m (%a)')
-            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date'], reply_markup=markup)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in handle_forecast_city: {e}")        
+        logger.error(f"Error in show_forecast_options: {e}")     
 
 # --- После handle_forecast_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
