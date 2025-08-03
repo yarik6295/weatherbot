@@ -90,6 +90,10 @@ LANGUAGES = {
         'main_menu': "🏠 Главное меню",
         'forecast_title': "{icon} *Прогноз погоды в {city}*\n📅 {date}",
         'select_date': "📅 Выберите дату прогноза",
+        'select_city_forecast': "🏙️ Выбор города для прогноза",
+        'select_date_forecast': "📅 Выбор даты для прогноза",
+        'select_city_chart': "🏙️ Выбор города для графика",
+        'select_date_chart': "📅 Выбор даты для графика",
         'current_weather': "🌡️ *Сейчас:* {temp}°C (ощущается {feels}°C)\n{icon} {desc}\n💧 Влажность: {humidity}%\n💨 Ветер: {wind} м/с\n👁️ Видимость: {visibility} км",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
@@ -152,6 +156,10 @@ LANGUAGES = {
         'main_menu': "🏠 Main menu",
         'forecast_title': "{icon} *Weather forecast in {city}*\n📅 {date}",
         'select_date': "📅 Select forecast date",
+        'select_city_forecast': "🏙️ Select city for forecast",
+        'select_date_forecast': "📅 Select date for forecast",
+        'select_city_chart': "🏙️ Select city for chart",
+        'select_date_chart': "📅 Select date for chart",
         'current_weather': "🌡️ *Now:* {temp}°C (feels like {feels}°C)\n{icon} {desc}\n💧 Humidity: {humidity}%\n💨 Wind: {wind} m/s\n👁️ Visibility: {visibility} km",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *Today:* {min}°C → {max}°C",
@@ -214,6 +222,10 @@ LANGUAGES = {
         'main_menu': "🏠 Головне меню",
         'forecast_title': "{icon} *Прогноз погоди в {city}*\n📅 {date}",
         'select_date': "📅 Оберіть дату прогнозу",
+        'select_city_forecast': "🏙️ Вибір міста для прогнозу",
+        'select_date_forecast': "📅 Вибір дати для прогнозу",
+        'select_city_chart': "🏙️ Вибір міста для графіка",
+        'select_date_chart': "📅 Вибір дати для графіка",
         'current_weather': "🌡️ *Зараз:* {temp}°C (відчувається {feels}°C)\n{icon} {desc}\n💧 Вологість: {humidity}%\n💨 Вітер: {wind} м/с\n👁️ Видимість: {visibility} км",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
@@ -641,7 +653,7 @@ def show_chart_options(msg):
         markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['select_date'],
+            LANGUAGES[lang]['select_city_chart'],
             reply_markup=markup
         )
     except Exception as e:
@@ -663,7 +675,7 @@ def handle_chart_city(call):
             weekday_idx = date.weekday() % 7
             label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
             markup.add(types.InlineKeyboardButton(text=label, callback_data=f"chartdate_{city}_{date_str}"))
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date'], reply_markup=markup)
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_chart'], reply_markup=markup)
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in handle_chart_city: {e}")        
@@ -671,29 +683,42 @@ def handle_chart_city(call):
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
+    settings = data_manager.get_user_settings(msg.chat.id)
+    lang = settings['language']
+    saved_cities = settings.get('saved_cities', [])
+    if not saved_cities:
+        safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
+        return
+    # Новый UX: сначала выбор города, потом даты
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for city in saved_cities:
+        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
+    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
+    safe_send_message(
+        msg.chat.id,
+        LANGUAGES[lang]['select_city_forecast'],
+        reply_markup=markup
+    )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
+def handle_forecast_city(call):
     try:
-        settings = data_manager.get_user_settings(msg.chat.id)
+        city = call.data.split("_", 1)[1]
+        settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        saved_cities = settings.get('saved_cities', [])
-        if not saved_cities:
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
-            return
-        # Для каждого города — отдельный блок с выбором даты
-        for city in saved_cities:
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            weekdays = LANGUAGES[lang]['weekdays']
-            today = datetime.now()
-            for i in range(5):
-                date = today + timedelta(days=i)
-                date_str = date.strftime('%Y-%m-%d')
-                weekday_idx = date.weekday() % 7
-                label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
-                markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
-            safe_send_message(
-                msg.chat.id,
-                f"🌦️ {city} — {LANGUAGES[lang]['select_date']}",
-                reply_markup=markup
-            )
+        today = datetime.now()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        weekdays = LANGUAGES[lang]['weekdays']
+        for i in range(5):
+            date = today + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            weekday_idx = date.weekday() % 7
+            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
+            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_forecast'], reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_forecast_city: {e}")
     except Exception as e:
         logger.error(f"Error in show_forecast_options: {e}")     
 
