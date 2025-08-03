@@ -1091,7 +1091,8 @@ def send_forecast(chat_id: int, city: str, lang: str):
 # -- Notification System --
 def send_notifications():
     try:
-        utc_now = datetime.utcnow().replace(second=0, microsecond=0)
+        from datetime import timezone
+        utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         for chat_id_str, settings in data_manager.data.items():
             try:
                 if not settings.get('notifications', False):
@@ -1105,7 +1106,8 @@ def send_notifications():
                 try:
                     user_tz = pytz.timezone(timezone_str)
                     user_time = utc_now.astimezone(user_tz)
-                    if user_time.strftime('%H:%M') == '20:00':
+                    notif_time = settings.get('notification_time', '20:00')
+                    if user_time.strftime('%H:%M') == notif_time:
                         notif_city = settings.get('notification_city')
                         if notif_city and notif_city in saved_cities:
                             city_for_notif = notif_city
