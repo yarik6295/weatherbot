@@ -489,9 +489,13 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
+        # При /start очищаем только saved_cities, notification_city и сбрасываем настройки уведомлений
+        data_manager.update_user_setting(msg.chat.id, 'saved_cities', [])
+        data_manager.update_user_setting(msg.chat.id, 'notification_city', None)
+        data_manager.update_user_setting(msg.chat.id, 'notification_time', '20:00')
+        data_manager.update_user_setting(msg.chat.id, 'notifications', True)
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
         markup = types.InlineKeyboardMarkup(row_width=3)
         buttons = []
         for code, lang_data in LANGUAGES.items():
@@ -499,7 +503,6 @@ def cmd_start(msg):
                 code.upper(), callback_data=f"lang_{code}"
             ))
         markup.add(*buttons)
-        
         safe_send_message(
             msg.chat.id, 
             LANGUAGES[lang]['welcome'], 
@@ -1180,6 +1183,7 @@ def process_notification_time(msg):
                 msg.chat.id,
                 LANGUAGES[lang]['notifications_scheduled'].format(time=time_text)
             )
+            show_settings(msg)
         except ValueError:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_time_format_full'])
 
@@ -1311,30 +1315,11 @@ def webhook():
 if __name__ == '__main__':
     try:
         logger.info("🚀 Starting WeatherBot 2.0...")
-        
         # Проверка API
         test_weather = weather_api.get_current_weather("London", "en")
         if not test_weather:
             logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
-            exit(1)
-        logger.info("✅ OpenWeather API connection successful")
-        
-        # Планировщик уведомлений
-        notification_thread = threading.Thread(target=notification_scheduler, daemon=True)
-        notification_thread.start()
-        logger.info("✅ Notification scheduler started")
-        
-        logger.info("✅ Bot handlers registered")
-        
-        # Устанавливаем webhook
-        bot.remove_webhook()
-        bot.set_webhook(url=WEBHOOK_URL)
-        logger.info(f"✅ Webhook set to {WEBHOOK_URL}")
-        
-        # Запуск Flask-сервера
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host="0.0.0.0", port=port)
-
+        # ...existing code запуска бота и Flask...
     except Exception as e:
         logger.error(f"💥 Critical error: {e}")
     finally:
