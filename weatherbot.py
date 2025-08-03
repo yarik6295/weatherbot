@@ -774,6 +774,16 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
+        # Формируем заголовок
+        try:
+            date_obj = datetime.strptime(selected_date, "%Y-%m-%d")
+        except Exception:
+            date_obj = None
+        if date_obj:
+            date_str = date_obj.strftime('%d.%m.%Y')
+        else:
+            date_str = selected_date
+        header = f"*🌤️Прогноз погоды на завтра ({date_str}) в городе 🏙️{city}:*\n\n"
         message = ""
         for item in forecast_data['list']:
             dt = datetime.fromtimestamp(item['dt'])
@@ -791,6 +801,8 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
             ) + "\n"
         if not message.strip():
             message = LANGUAGES[lang]['not_found']
+        else:
+            message = header + message
         safe_send_message(chat_id, message, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Error in send_forecast_for_date: {e}")
