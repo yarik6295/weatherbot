@@ -1,3 +1,37 @@
+# --- Выбор города для уведомлений ---
+@bot.callback_query_handler(func=lambda call: call.data == "choose_notification_city")
+def choose_notification_city(call):
+    try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        if not saved_cities:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['no_saved_cities'])
+            return
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for city in saved_cities:
+            markup.add(types.InlineKeyboardButton(city, callback_data=f"set_notification_city_{city}"))
+        safe_send_message(call.message.chat.id, "🔔 Выберите город для ежедневных уведомлений:", reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in choose_notification_city: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_notification_city_'))
+def set_notification_city(call):
+    try:
+        city = call.data.split('_', 3)[3]
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        if city not in saved_cities:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        data_manager.update_user_setting(call.message.chat.id, 'notification_city', city)
+        safe_send_message(call.message.chat.id, f"✅ {city} теперь выбран для ежедневных уведомлений о прогнозе.")
+        show_settings(call.message)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in set_notification_city: {e}")
 import os
 import logging
 import matplotlib
@@ -78,6 +112,7 @@ ALERT_ICONS = {
 
 LANGUAGES = {
     'ru': {
+        'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
         'welcome': "🌤️ *Добро пожаловать в WeatherBot 2.0!*\n\n✨ Новинки:\n🏙️ Несколько городов\n📊 Графики температуры\n🚨 Погодные предупреждения\n\nВыберите язык:",
         'ask_location': "📍 Отправьте геолокацию или введите название города:",
         'forecast_button': "🌦️ Прогноз",
@@ -139,6 +174,7 @@ LANGUAGES = {
         'weather_chart': "График температуры"
     },
     'en': {
+        'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         'welcome': "🌤️ *Welcome to WeatherBot 2.0!*\n\n✨ What's new:\n🏙️ Multiple cities\n📊 Temperature charts\n🚨 Weather alerts\n\nChoose your language:",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
@@ -200,6 +236,7 @@ LANGUAGES = {
         'weather_chart': "Temperature chart"
     },
     'uk': {
+        'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
         'welcome': "🌤️ *Ласкаво просимо до WeatherBot 2.0!*\n\n✨ Новинки:\n🏙️ Декілька міст\n📊 Графіки температури\n🚨 Погодні попередження\n\nОберіть мову:",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
@@ -294,9 +331,13 @@ class DataManager:
                 'notification_time': '08:00',
                 'saved_cities': [],
                 'timezone': 'UTC',
-                'last_activity': datetime.now().isoformat()
+                'last_activity': datetime.now().isoformat(),
+                'notification_city': None
             }
             self.save_data()
+        # Миграция для старых пользователей
+        if 'notification_city' not in self.data[sid]:
+            self.data[sid]['notification_city'] = None
         return self.data[sid]
     
     def update_user_setting(self, chat_id: int, key: str, value):
@@ -614,10 +655,12 @@ def handle_chart_city(call):
         lang = settings['language']
         today = datetime.now()
         markup = types.InlineKeyboardMarkup(row_width=2)
+        weekdays = LANGUAGES[lang]['weekdays']
         for i in range(5):
             date = today + timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
-            label = date.strftime('%d.%m (%a)')
+            weekday_idx = date.weekday() % 7
+            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
             markup.add(types.InlineKeyboardButton(text=label, callback_data=f"chartdate_{city}_{date_str}"))
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date'], reply_markup=markup)
         bot.answer_callback_query(call.id)
@@ -637,11 +680,13 @@ def show_forecast_options(msg):
         # Для каждого города — отдельный блок с выбором даты
         for city in saved_cities:
             markup = types.InlineKeyboardMarkup(row_width=2)
+            weekdays = LANGUAGES[lang]['weekdays']
             today = datetime.now()
             for i in range(5):
                 date = today + timedelta(days=i)
                 date_str = date.strftime('%Y-%m-%d')
-                label = date.strftime('%d.%m (%a)')
+                weekday_idx = date.weekday() % 7
+                label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
                 markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
             safe_send_message(
                 msg.chat.id,
@@ -826,6 +871,10 @@ def process_new_city(msg):
         if normalized_city not in saved_cities:
             saved_cities.append(normalized_city)
             data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
+            # Если пользователь не выбирал город для уведомлений вручную, делаем этот город городом для уведомлений
+            if not settings.get('notification_city'):
+                data_manager.update_user_setting(msg.chat.id, 'notification_city', normalized_city)
+                safe_send_message(msg.chat.id, f"✅ {normalized_city} теперь выбран для ежедневных уведомлений о прогнозе.")
             safe_send_message(msg.chat.id, LANGUAGES[lang]['city_added'].format(city=normalized_city))
             send_current_weather(msg.chat.id, normalized_city, lang)
         else:
@@ -841,18 +890,22 @@ def show_settings(msg):
         lang = settings['language']
 
         markup = types.InlineKeyboardMarkup(row_width=1)
-        # Локализованный текст для кнопки уведомлений
         notif_text = LANGUAGES[lang]['notifications_on'] if settings['notifications'] else LANGUAGES[lang]['notifications_off']
         markup.add(types.InlineKeyboardButton(notif_text, callback_data="toggle_notifications"))
-        # Время уведомлений
         markup.add(types.InlineKeyboardButton(
             LANGUAGES[lang]['notification_time'].format(time=settings['notification_time']),
             callback_data="set_notification_time"
         ))
-        # Выбор языка прямо в настройках
+        # Кнопка выбора города для уведомлений
+        if settings.get('saved_cities', []):
+            notif_city = settings.get('notification_city')
+            notif_city_label = notif_city if notif_city else settings['saved_cities'][0]
+            markup.add(types.InlineKeyboardButton(
+                f"🔔 Город для уведомлений: {notif_city_label}",
+                callback_data="choose_notification_city"
+            ))
         lang_buttons = [types.InlineKeyboardButton(code.upper(), callback_data=f"setlang_{code}") for code in LANGUAGES.keys()]
         markup.add(*lang_buttons)
-        # Очистить все города
         if settings.get('saved_cities', []):
             markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['clear_cities_button'], callback_data="clear_cities"))
 
@@ -1012,40 +1065,33 @@ def send_forecast(chat_id: int, city: str, lang: str):
 # -- Notification System --
 def send_notifications():
     try:
-        current_time = datetime.now()
-        
+        utc_now = datetime.utcnow().replace(second=0, microsecond=0)
         for chat_id_str, settings in data_manager.data.items():
             try:
                 if not settings.get('notifications', False):
                     continue
-                
                 chat_id = int(chat_id_str)
-                notification_time = settings.get('notification_time', '08:00')
                 timezone_str = settings.get('timezone', 'UTC')
                 saved_cities = settings.get('saved_cities', [])
                 lang = settings.get('language', 'en')
-                
                 if not saved_cities:
                     continue
-                
-                # Проверить время в часовом поясе пользователя
                 try:
                     user_tz = pytz.timezone(timezone_str)
-                    user_time = current_time.astimezone(user_tz)
-                    
-                    if user_time.strftime('%H:%M') == notification_time:
-                        # Отправить прогноз для первого сохраненного города
-                        main_city = saved_cities[0]
-                        send_current_weather(chat_id, main_city, lang)
-                        
-                        # Небольшая задержка чтобы избежать спама
+                    user_time = utc_now.astimezone(user_tz)
+                    if user_time.strftime('%H:%M') == '20:00':
+                        notif_city = settings.get('notification_city')
+                        if notif_city and notif_city in saved_cities:
+                            city_for_notif = notif_city
+                        else:
+                            city_for_notif = saved_cities[0]
+                        tomorrow = (user_time + timedelta(days=1)).strftime('%Y-%m-%d')
+                        send_forecast_for_date(chat_id, city_for_notif, lang, tomorrow)
                         time.sleep(1)
                 except Exception as tz_e:
                     logger.error(f"Timezone error for {chat_id_str}: {tz_e}")
-                    
             except Exception as e:
                 logger.error(f"Error sending notification to {chat_id_str}: {e}")
-                
     except Exception as e:
         logger.error(f"Error in notification system: {e}")
 
