@@ -19,10 +19,8 @@ import io
 from typing import Dict, List, Optional
 import urllib3
 
-# Отключаем предупреждения SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# -- Logging Configuration --
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -33,24 +31,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# -- Configuration (используй переменные окружения!) --
-TOKEN = '8256727883:AAHk2paecc7KzkyGqwvuv3BEWd8R1Mq_PTQ'
-OWM_API_KEY = 'a9570d9508d57dc1c705ef6bbad533e4'
+TOKEN = 'BOT_TOKEN'
+OWM_API_KEY = 'OPENWEATHER_API_KEY'
 DATA_FILE = 'user_data.json'
 
-# Проверка конфигурации
 if TOKEN == 'YOUR_BOT_TOKEN_HERE' or OWM_API_KEY == 'YOUR_API_KEY_HERE':
     logger.error("❌ Установи переменные окружения TELEGRAM_BOT_TOKEN и OPENWEATHER_API_KEY!")
     exit(1)
 
-# -- Initialization --
 bot = telebot.TeleBot(TOKEN)
 tf = TimezoneFinder()
 
-# Исправленная инициализация геолокатора
 try:
     import ssl
-    # Создаем SSL контекст, который не проверяет сертификаты
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
@@ -59,7 +52,6 @@ except Exception as e:
     logger.warning(f"SSL context creation failed: {e}")
     geolocator = Nominatim(user_agent="enhanced_weatherbot/1.0", timeout=15)
 
-# -- Weather Icons & Emojis --
 WEATHER_ICONS = {
     'clear sky': '☀️',
     'few clouds': '🌤️',
@@ -84,118 +76,189 @@ ALERT_ICONS = {
     'wind': '💨'
 }
 
-# -- Enhanced Language Resources --
 LANGUAGES = {
-    'uk': {
-        'welcome':       "🌤️ *Ласкаво просимо до WeatherBot 2.0!*\n\n"
-                         "✨ Новинки:\n🏙️ Декілька міст\n📊 Графіки температури\n🚨 Погодні попередження\n\n"
-                         "Оберіть мову:",
-        'ask_location':  "📍 Надішліть геолокацію або введіть назву міста:",
-        'forecast_button':       "🌦️ Прогноз",
-        'cities_button':         "🏙️ Мої міста",
-        'settings_button':       "⚙️ Налаштування",
-        'chart_button':          "📊 Графік",
-        'send_location':         "📍 Геолокація",
-        'back':                  "🔙 Назад",
-        'main_menu':             "🏠 Головне меню",
-        'forecast_title':        "{icon} *Прогноз погоди в {city}*\n📅 {date}",
-        'select_date':           "📅 Оберіть дату прогнозу",
-        'current_weather':       "🌡️ *Зараз:* {temp}°C (відчувається {feels}°C)\n{icon} {desc}\n"
-                                 "💧 Вологість: {humidity}%\n💨 Вітер: {wind} м/с\n👁️ Видимість: {visibility} км",
-        'hourly':                "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
-        'daily_summary':         "\n📊 *За день:* {min}°C → {max}°C",
-        'alerts':                "🚨 *Попередження:*\n{alerts}",
-        'no_alerts':             "✅ Без попереджень",
-        'not_found':             "⚠️ Місто не знайдено. Спробуйте ще раз.",
-        'error':                 "❌ Помилка: {error}",
-        'confirm_clear_all':     "⚠️ Ви впевнені, що хочете видалити всі збережені міста?",
-        'confirm_clear_all_yes': "✅ Так, очистити",
-        'cancel':                "❌ Скасування",
-        'cancelled':             "❌ Скасовано",
-        'invalid_time_format':   "❌ Неправильний формат часу. Використовуйте ГГ:ХХ",
-        'enter_city':            "📍 Введіть назву міста:",
-        'enter_notification_time': "🕐 Введіть час для сповіщень у форматі ГГ:ХХ (наприклад, 08:30):",
-        'all_cities_removed':    "🗑️ Усі міста видалені",
-        'clear_cities_button':   "🗑️ Очистити міста",
-        'city_added':            "✅ Місто {city} додано",
-        'city_removed':          "🗑️ Місто {city} видалено",
-        'max_cities':            "⚠️ Максимум 5 міст",
-        'saved_cities':          "🏙️ *Збережені міста:*",
-        'no_saved_cities':       "📍 Немає збережених міст"
-    },
     'ru': {
-        'welcome':       "🌤️ *Добро пожаловать в WeatherBot 2.0!*\n\n"
-                         "✨ Новинки:\n🏙️ Несколько городов\n📊 Графики температуры\n🚨 Погодные предупреждения\n\n"
-                         "Выберите язык:",
-        'ask_location':  "📍 Отправьте геолокацию или введите название города:",
-        'forecast_button':       "🌦️ Прогноз",
-        'cities_button':         "🏙️ Мои города",
-        'settings_button':       "⚙️ Настройки",
-        'chart_button':          "📊 График",
-        'send_location':         "📍 Геолокация",
-        'back':                  "🔙 Назад",
-        'main_menu':             "🏠 Главное меню",
-        'forecast_title':        "{icon} *Прогноз погоды в {city}*\n📅 {date}",
-        'select_date':           "📅 Выберите дату прогноза",
-        'current_weather':       "🌡️ *Сейчас:* {temp}°C (ощущается {feels}°C)\n{icon} {desc}\n"
-                                 "💧 Влажность: {humidity}%\n💨 Ветер: {wind} м/с\n👁️ Видимость: {visibility} км",
-        'hourly':                "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
-        'daily_summary':         "\n📊 *За день:* {min}°C → {max}°C",
-        'alerts':                "🚨 *Предупреждения:*\n{alerts}",
-        'no_alerts':             "✅ Без предупреждений",
-        'not_found':             "⚠️ Город не найден. Попробуйте снова.",
-        'error':                 "❌ Ошибка: {error}",
-        'confirm_clear_all':     "⚠️ Вы уверены, что хотите удалить все сохраненные города?",
+        'welcome': "🌤️ *Добро пожаловать в WeatherBot 2.0!*\n\n✨ Новинки:\n🏙️ Несколько городов\n📊 Графики температуры\n🚨 Погодные предупреждения\n\nВыберите язык:",
+        'ask_location': "📍 Отправьте геолокацию или введите название города:",
+        'forecast_button': "🌦️ Прогноз",
+        'cities_button': "🏙️ Мои города",
+        'settings_button': "⚙️ Настройки",
+        'chart_button': "📊 График",
+        'send_location': "📍 Геолокация",
+        'back': "🔙 Назад",
+        'main_menu': "🏠 Главное меню",
+        'forecast_title': "{icon} *Прогноз погоды в {city}*\n📅 {date}",
+        'select_date': "📅 Выберите дату прогноза",
+        'current_weather': "🌡️ *Сейчас:* {temp}°C (ощущается {feels}°C)\n{icon} {desc}\n💧 Влажность: {humidity}%\n💨 Ветер: {wind} м/с\n👁️ Видимость: {visibility} км",
+        'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
+        'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
+        'alerts': "🚨 *Предупреждения:*\n{alerts}",
+        'no_alerts': "✅ Без предупреждений",
+        'not_found': "⚠️ Город не найден. Попробуйте снова.",
+        'error': "❌ Ошибка: {error}",
+        'confirm_clear_all': "⚠️ Вы уверены, что хотите удалить все сохраненные города?",
         'confirm_clear_all_yes': "✅ Да, удалить",
-        'cancel':                "❌ Отмена",
-        'cancelled':             "❌ Отменено",
-        'invalid_time_format':   "❌ Неверный формат времени. Используйте ЧЧ:ММ",
-        'enter_city':            "📍 Введите название города:",
+        'cancel': "❌ Отмена",
+        'cancelled': "❌ Отменено",
+        'invalid_time_format': "❌ Неверный формат времени. Используйте ЧЧ:ММ",
+        'enter_city': "📍 Введите название города:",
         'enter_notification_time': "🕐 Введите время для уведомлений (ЧЧ:ММ):",
-        'all_cities_removed':    "🗑️ Все города удалены",
-        'clear_cities_button':   "🗑️ Очистить города",
-        'city_added':            "✅ Город {city} добавлен",
-        'city_removed':          "🗑️ Город {city} удален",
-        'max_cities':            "⚠️ Максимум 5 городов",
-        'saved_cities':          "🏙️ *Сохраненные города:*",
-        'no_saved_cities':       "📍 Нет сохраненных городов"
+        'all_cities_removed': "🗑️ Все города удалены",
+        'clear_cities_button': "🗑️ Очистить города",
+        'city_added': "✅ Город {city} добавлен",
+        'city_removed': "🗑️ Город {city} удален",
+        'max_cities': "⚠️ Максимум 5 городов",
+        'saved_cities': "🏙️ *Сохраненные города:*",
+        'no_saved_cities': "📍 Нет сохраненных городов",
+        'add_city': "➕ Добавить город",
+        'notifications_on': "🔔 Отключить уведомления",
+        'notifications_off': "🔔 Включить уведомления",
+        'notification_time': "🕐 Время: {time}",
+        'settings_menu': "⚙️ *Настройки*\n\n🔔 Уведомления: {notifications}\n🕐 Время: {time}\n🌍 Язык: {lang}\n🏙️ Городов сохранено: {cities}\n🕒 Часовой пояс: {timezone}",
+        'on': "включены",
+        'off': "отключены",
+        'notifications_status': "🔔 Уведомления {status}",
+        'language_changed': "✅ Язык изменён на {lang}",
+        'help': "🤖 *WeatherBot 2.0 - Помощь*\n\n🌤️ *Основные функции:*\n• Текущая погода с подробной информацией\n• Прогноз погоды на несколько дней\n• Графики температуры\n• Погодные предупреждения\n• До 5 сохраненных городов\n• Автоматические уведомления\n\n📱 *Как пользоваться:*\n• Отправьте геолокацию или название города\n• Используйте кнопки для быстрого доступа\n• Настройте уведомления в настройках\n• Добавляйте города в избранное\n\n🔧 *Команды:*\n/start - Запуск бота\n/help - Эта справка\n\n💡 *Совет:* Добавьте несколько городов для быстрого доступа к прогнозу!",
+        'only_text_location': "🤖 Я понимаю только текст и геолокацию. Отправьте название города или нажмите кнопку 📍 Геолокация",
+        'hourly_forecast': "🕐 **Почасовой прогноз:**",
+        'enter_city_or_location': "📍 Введите город или отправьте геолокацию:",
+        'enter_notification_time_full': "🕐 Введите время для уведомлений в формате ЧЧ:ММ (например, 08:30):",
+        'notifications_scheduled': "🔔 Уведомления будут приходить в {time}",
+        'invalid_time_format_full': "❌ Неверный формат времени. Используйте ЧЧ:ММ",
+        'choose_language': "🌍 Выберите язык:",
+        'help_full': "🤖 *WeatherBot 2.0 - Помощь*\n\n🌤️ *Основные функции:*\n• Текущая погода с подробной информацией\n• Прогноз погоды на несколько дней\n• Графики температуры\n• Погодные предупреждения\n• До 5 сохраненных городов\n• Автоматические уведомления\n\n📱 *Как пользоваться:*\n• Отправьте геолокацию или название города\n• Используйте кнопки для быстрого доступа\n• Настройте уведомления в настройках\n• Добавляйте города в избранное\n\n🔧 *Команды:*\n/start - Запуск бота\n/help - Эта справка\n\n💡 *Совет:* Добавьте несколько городов для быстрого доступа к прогнозу!",
+        'city_tokyo': "Токио",
+        'city_london': "Лондон",
+        'city_washington': "Вашингтон",
+        'city_newyork': "Нью-Йорк",
+        'alert_hot': "{icon} Очень жарко! Температура: {temp}°C",
+        'alert_cold': "{icon} Очень холодно! Температура: {temp}°C",
+        'alert_wind': "{icon} Сильный ветер: {wind} м/с",
+        'alert_visibility': "👁️ Плохая видимость: {visibility} км",
+        'weather_chart': "График температуры"
     },
     'en': {
-        'welcome':       "🌤️ *Welcome to WeatherBot 2.0!*\n\n"
-                         "✨ What's new:\n🏙️ Multiple cities\n📊 Temperature charts\n🚨 Weather alerts\n\n"
-                         "Choose your language:",
-        'ask_location':  "📍 Send your location or enter a city name:",
-        'forecast_button':       "🌦️ Forecast",
-        'cities_button':         "🏙️ My Cities",
-        'settings_button':       "⚙️ Settings",
-        'chart_button':          "📊 Chart",
-        'send_location':         "📍 Location",
-        'back':                  "🔙 Back",
-        'main_menu':             "🏠 Main menu",
-        'forecast_title':        "{icon} *Weather forecast in {city}*\n📅 {date}",
-        'select_date':           "📅 Select forecast date",
-        'current_weather':       "🌡️ *Now:* {temp}°C (feels like {feels}°C)\n{icon} {desc}\n"
-                                 "💧 Humidity: {humidity}%\n💨 Wind: {wind} m/s\n👁️ Visibility: {visibility} km",
-        'hourly':                "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
-        'daily_summary':         "\n📊 *Today:* {min}°C → {max}°C",
-        'alerts':                "🚨 *Weather Alerts:*\n{alerts}",
-        'no_alerts':             "✅ No alerts",
-        'not_found':             "⚠️ City not found. Try again.",
-        'error':                 "❌ Error: {error}",
-        'confirm_clear_all':     "⚠️ Are you sure you want to delete all saved cities?",
+        'welcome': "🌤️ *Welcome to WeatherBot 2.0!*\n\n✨ What's new:\n🏙️ Multiple cities\n📊 Temperature charts\n🚨 Weather alerts\n\nChoose your language:",
+        'ask_location': "📍 Send your location or enter a city name:",
+        'forecast_button': "🌦️ Forecast",
+        'cities_button': "🏙️ My Cities",
+        'settings_button': "⚙️ Settings",
+        'chart_button': "📊 Chart",
+        'send_location': "📍 Location",
+        'back': "🔙 Back",
+        'main_menu': "🏠 Main menu",
+        'forecast_title': "{icon} *Weather forecast in {city}*\n📅 {date}",
+        'select_date': "📅 Select forecast date",
+        'current_weather': "🌡️ *Now:* {temp}°C (feels like {feels}°C)\n{icon} {desc}\n💧 Humidity: {humidity}%\n💨 Wind: {wind} m/s\n👁️ Visibility: {visibility} km",
+        'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
+        'daily_summary': "\n📊 *Today:* {min}°C → {max}°C",
+        'alerts': "🚨 *Weather Alerts:*\n{alerts}",
+        'no_alerts': "✅ No alerts",
+        'not_found': "⚠️ City not found. Try again.",
+        'error': "❌ Error: {error}",
+        'confirm_clear_all': "⚠️ Are you sure you want to delete all saved cities?",
         'confirm_clear_all_yes': "✅ Yes, clear",
-        'cancel':                "❌ Cancel",
-        'cancelled':             "❌ Cancelled",
-        'invalid_time_format':   "❌ Invalid time format. Use HH:MM",
-        'enter_city':            "📍 Enter city name:",
+        'cancel': "❌ Cancel",
+        'cancelled': "❌ Cancelled",
+        'invalid_time_format': "❌ Invalid time format. Use HH:MM",
+        'enter_city': "📍 Enter city name:",
         'enter_notification_time': "🕐 Enter notification time (HH:MM):",
-        'all_cities_removed':    "🗑️ All cities removed",
-        'clear_cities_button':   "🗑️ Clear cities",
-        'city_added':            "✅ City {city} added",
-        'city_removed':          "🗑️ City {city} removed",
-        'max_cities':            "⚠️ Maximum 5 cities",
-        'saved_cities':          "🏙️ *Saved Cities:*",
-        'no_saved_cities':       "📍 No saved cities"
+        'all_cities_removed': "🗑️ All cities removed",
+        'clear_cities_button': "🗑️ Clear cities",
+        'city_added': "✅ City {city} added",
+        'city_removed': "🗑️ City {city} removed",
+        'max_cities': "⚠️ Maximum 5 cities",
+        'saved_cities': "🏙️ *Saved Cities:*",
+        'no_saved_cities': "📍 No saved cities",
+        'add_city': "➕ Add city",
+        'notifications_on': "🔔 Turn off notifications",
+        'notifications_off': "🔔 Turn on notifications",
+        'notification_time': "🕐 Time: {time}",
+        'settings_menu': "⚙️ *Settings*\n\n🔔 Notifications: {notifications}\n🕐 Time: {time}\n🌍 Language: {lang}\n🏙️ Saved cities: {cities}\n🕒 Timezone: {timezone}",
+        'on': "on",
+        'off': "off",
+        'notifications_status': "🔔 Notifications {status}",
+        'language_changed': "✅ Language changed to {lang}",
+        'help': "🤖 *WeatherBot 2.0 - Help*\n\n🌤️ *Main features:*\n• Current weather with details\n• Weather forecast for several days\n• Temperature charts\n• Weather alerts\n• Up to 5 saved cities\n• Automatic notifications\n\n📱 *How to use:*\n• Send your location or city name\n• Use buttons for quick access\n• Set up notifications in settings\n• Add cities to favorites\n\n🔧 *Commands:*\n/start - Start bot\n/help - This help\n\n💡 *Tip:* Add several cities for quick access to the forecast!",
+        'only_text_location': "🤖 I only understand text and location. Send a city name or press 📍 Location",
+        'hourly_forecast': "🕐 **Hourly forecast:**",
+        'enter_city_or_location': "📍 Enter a city or send your location:",
+        'enter_notification_time_full': "🕐 Enter notification time in HH:MM format (e.g., 08:30):",
+        'notifications_scheduled': "🔔 Notifications will be sent at {time}",
+        'invalid_time_format_full': "❌ Invalid time format. Use HH:MM",
+        'choose_language': "🌍 Choose language:",
+        'help_full': "🤖 *WeatherBot 2.0 - Help*\n\n🌤️ *Main features:*\n• Current weather with details\n• Weather forecast for several days\n• Temperature charts\n• Weather alerts\n• Up to 5 saved cities\n• Automatic notifications\n\n📱 *How to use:*\n• Send your location or city name\n• Use buttons for quick access\n• Set up notifications in settings\n• Add cities to favorites\n\n🔧 *Commands:*\n/start - Start bot\n/help - This help\n\n💡 *Tip:* Add several cities for quick access to the forecast!",
+        'city_tokyo': "Tokyo",
+        'city_london': "London",
+        'city_washington': "Washington",
+        'city_newyork': "New York",
+        'alert_hot': "{icon} Very hot! Temperature: {temp}°C",
+        'alert_cold': "{icon} Very cold! Temperature: {temp}°C",
+        'alert_wind': "{icon} Strong wind: {wind} m/s",
+        'alert_visibility': "👁️ Low visibility: {visibility} km",
+        'weather_chart': "Temperature chart"
+    },
+    'uk': {
+        'welcome': "🌤️ *Ласкаво просимо до WeatherBot 2.0!*\n\n✨ Новинки:\n🏙️ Декілька міст\n📊 Графіки температури\n🚨 Погодні попередження\n\nОберіть мову:",
+        'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
+        'forecast_button': "🌦️ Прогноз",
+        'cities_button': "🏙️ Мої міста",
+        'settings_button': "⚙️ Налаштування",
+        'chart_button': "📊 Графік",
+        'send_location': "📍 Геолокація",
+        'back': "🔙 Назад",
+        'main_menu': "🏠 Головне меню",
+        'forecast_title': "{icon} *Прогноз погоди в {city}*\n📅 {date}",
+        'select_date': "📅 Оберіть дату прогнозу",
+        'current_weather': "🌡️ *Зараз:* {temp}°C (відчувається {feels}°C)\n{icon} {desc}\n💧 Вологість: {humidity}%\n💨 Вітер: {wind} м/с\n👁️ Видимість: {visibility} км",
+        'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
+        'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
+        'alerts': "🚨 *Попередження:*\n{alerts}",
+        'no_alerts': "✅ Без попереджень",
+        'not_found': "⚠️ Місто не знайдено. Спробуйте ще раз.",
+        'error': "❌ Помилка: {error}",
+        'confirm_clear_all': "⚠️ Ви впевнені, що хочете видалити всі збережені міста?",
+        'confirm_clear_all_yes': "✅ Так, очистити",
+        'cancel': "❌ Скасування",
+        'cancelled': "❌ Скасовано",
+        'invalid_time_format': "❌ Неправильний формат часу. Використовуйте ГГ:ХХ",
+        'enter_city': "📍 Введіть назву міста:",
+        'enter_notification_time': "🕐 Введіть час для сповіщень у форматі ГГ:ХХ (наприклад, 08:30):",
+        'all_cities_removed': "🗑️ Усі міста видалені",
+        'clear_cities_button': "🗑️ Очистити міста",
+        'city_added': "✅ Місто {city} додано",
+        'city_removed': "🗑️ Місто {city} видалено",
+        'max_cities': "⚠️ Максимум 5 міст",
+        'saved_cities': "🏙️ *Збережені міста:*",
+        'no_saved_cities': "📍 Немає збережених міст",
+        'add_city': "➕ Додати місто",
+        'notifications_on': "🔔 Вимкнути сповіщення",
+        'notifications_off': "🔔 Увімкнути сповіщення",
+        'notification_time': "🕐 Час: {time}",
+        'settings_menu': "⚙️ *Налаштування*\n\n🔔 Сповіщення: {notifications}\n🕐 Час: {time}\n🌍 Мова: {lang}\n🏙️ Збережено міст: {cities}\n🕒 Часовий пояс: {timezone}",
+        'on': "увімкнено",
+        'off': "вимкнено",
+        'notifications_status': "🔔 Сповіщення {status}",
+        'language_changed': "✅ Мову змінено на {lang}",
+        'help': "🤖 *WeatherBot 2.0 - Довідка*\n\n🌤️ *Основні функції:*\n• Поточна погода з деталями\n• Прогноз погоди на кілька днів\n• Графіки температури\n• Погодні попередження\n• До 5 збережених міст\n• Автоматичні сповіщення\n\n📱 *Як користуватись:*\n• Надішліть геолокацію або назву міста\n• Використовуйте кнопки для швидкого доступу\n• Налаштуйте сповіщення в налаштуваннях\n• Додавайте міста в обране\n\n🔧 *Команди:*\n/start - Запуск бота\n/help - Ця довідка\n\n💡 *Порада:* Додайте кілька міст для швидкого доступу до прогнозу!",
+        'only_text_location': "🤖 Я розумію лише текст і геолокацію. Надішліть назву міста або натисніть кнопку 📍 Геолокація",
+        'hourly_forecast': "🕐 **Погодинний прогноз:**",
+        'enter_city_or_location': "📍 Введіть місто або надішліть геолокацію:",
+        'enter_notification_time_full': "🕐 Введіть час для сповіщень у форматі ГГ:ХХ (наприклад, 08:30):",
+        'notifications_scheduled': "🔔 Сповіщення будуть надсилатися о {time}",
+        'invalid_time_format_full': "❌ Неправильний формат часу. Використовуйте ГГ:ХХ",
+        'choose_language': "🌍 Оберіть мову:",
+        'help_full': "🤖 *WeatherBot 2.0 - Довідка*\n\n🌤️ *Основні функції:*\n• Поточна погода з деталями\n• Прогноз погоди на кілька днів\n• Графіки температури\n• Погодні попередження\n• До 5 збережених міст\n• Автоматичні сповіщення\n\n📱 *Як користуватись:*\n• Надішліть геолокацію або назву міста\n• Використовуйте кнопки для швидкого доступу\n• Налаштуйте сповіщення в налаштуваннях\n• Додавайте міста в обране\n\n🔧 *Команди:*\n/start - Запуск бота\n/help - Ця довідка\n\n💡 *Порада:* Додайте кілька міст для швидкого доступу до прогнозу!",
+        'city_tokyo': "Токіо",
+        'city_london': "Лондон",
+        'city_washington': "Вашингтон",
+        'city_newyork': "Нью-Йорк",
+        'alert_hot': "{icon} Дуже спекотно! Температура: {temp}°C",
+        'alert_cold': "{icon} Дуже холодно! Температура: {temp}°C",
+        'alert_wind': "{icon} Сильний вітер: {wind} м/с",
+        'alert_visibility': "👁️ Погана видимість: {visibility} км",
+        'weather_chart': "Графік температури"
     }
 }
 # -- Data Management --
@@ -282,32 +345,27 @@ class WeatherAPI:
             logger.error(f"Error fetching forecast: {e}")
             return None
     
-    def get_weather_alerts(self, lat: float, lon: float) -> List[Dict]:
+    def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
         """Генерирует погодные предупреждения на основе текущих условий"""
         try:
-            current = self.get_current_weather_by_coords(lat, lon)
+            current = self.get_current_weather_by_coords(lat, lon, lang)
             if not current:
                 return []
-            
             alerts = []
             temp = current['main']['temp']
             wind_speed = current['wind']['speed']
             visibility = current.get('visibility', 10000) / 1000  # км
-            
             # Температурные предупреждения
             if temp > 35:
-                alerts.append(f"{ALERT_ICONS['hot']} Экстремальная жара: {temp}°C")
+                alerts.append(LANGUAGES[lang]['alert_hot'].format(icon=ALERT_ICONS['hot'], temp=temp))
             elif temp < -20:
-                alerts.append(f"{ALERT_ICONS['cold']} Экстремальный холод: {temp}°C")
-            
+                alerts.append(LANGUAGES[lang]['alert_cold'].format(icon=ALERT_ICONS['cold'], temp=temp))
             # Ветер
             if wind_speed > 15:
-                alerts.append(f"{ALERT_ICONS['wind']} Сильный ветер: {wind_speed} м/с")
-            
+                alerts.append(LANGUAGES[lang]['alert_wind'].format(icon=ALERT_ICONS['wind'], wind=wind_speed))
             # Видимость
             if visibility < 1:
-                alerts.append(f"🌫️ Плохая видимость: {visibility} км")
-            
+                alerts.append(LANGUAGES[lang]['alert_visibility'].format(visibility=visibility))
             return alerts
         except Exception as e:
             logger.error(f"Error getting weather alerts: {e}")
@@ -518,30 +576,53 @@ def show_saved_cities(msg):
     except Exception as e:
         logger.error(f"Error in show_saved_cities: {e}")
 
+# --- Вместо функции show_chart_options ---
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['chart_button'] for lang in LANGUAGES.keys()))
 def show_chart_options(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
         saved_cities = settings.get('saved_cities', [])
         if not saved_cities:
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
-            return
-        
+            default_cities = [
+                LANGUAGES[lang]['city_tokyo'],
+                LANGUAGES[lang]['city_london'],
+                LANGUAGES[lang]['city_washington'],
+                LANGUAGES[lang]['city_newyork']
+            ]
+            cities = default_cities
+        else:
+            cities = saved_cities
         markup = types.InlineKeyboardMarkup(row_width=2)
-        for city in saved_cities:
-            markup.add(types.InlineKeyboardButton(
-                f"📊 {city}", callback_data=f"chart_{city}"
-            ))
-        
+        for city in cities:
+            markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['weather_chart'],
+            LANGUAGES[lang]['select_date'],
             reply_markup=markup
         )
     except Exception as e:
         logger.error(f"Error in show_chart_options: {e}")
+
+# --- После show_chart_options ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("chartcity_"))
+def handle_chart_city(call):
+    try:
+        city = call.data.split("_", 1)[1]
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        today = datetime.now()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for i in range(5):
+            date = today + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            label = date.strftime('%d.%m (%a)')
+            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"chartdate_{city}_{date_str}"))
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date'], reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_chart_city: {e}")        
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
@@ -567,6 +648,97 @@ def show_forecast_options(msg):
         )
     except Exception as e:
         logger.error(f"Error in show_forecast_options: {e}")
+
+# --- После show_forecast_options ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
+def handle_forecast_city(call):
+    try:
+        city = call.data.split("_", 1)[1]
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        today = datetime.now()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for i in range(5):
+            date = today + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            label = date.strftime('%d.%m (%a)')
+            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date'], reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_forecast_city: {e}")        
+
+# --- После handle_forecast_city ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
+def handle_forecast_date(call):
+    try:
+        _, city, date_str = call.data.split("_", 2)
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        send_forecast_for_date(call.message.chat.id, city, lang, date_str)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_forecast_date: {e}")
+
+# --- После handle_chart_city ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("chartdate_"))
+def handle_chart_date(call):
+    try:
+        _, city, date_str = call.data.split("_", 2)
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        forecast_data = weather_api.get_forecast(city, lang)
+        if not forecast_data:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        # Фильтруем только по выбранной дате
+        filtered = {'list': [item for item in forecast_data['list'] if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str]}
+        if not filtered['list']:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        chart_buffer = ChartGenerator.create_temperature_chart(filtered, city, lang)
+        if chart_buffer:
+            bot.send_photo(
+                call.message.chat.id,
+                chart_buffer,
+                caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
+            )
+        else:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Chart generation failed"))
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_chart_date: {e}")
+
+
+# --- После handle_forecast_date ---
+def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
+    try:
+        forecast_data = weather_api.get_forecast(city, lang)
+        if not forecast_data:
+            safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
+            return
+        message = ""
+        for item in forecast_data['list']:
+            dt = datetime.fromtimestamp(item['dt'])
+            if dt.strftime('%Y-%m-%d') != selected_date:
+                continue
+            hour = dt.strftime('%H')
+            temp = round(item['main']['temp'])
+            desc = item['weather'][0]['description'].title()
+            icon = get_weather_icon(item['weather'][0]['description'])
+            message += LANGUAGES[lang]['hourly'].format(
+                hour=hour,
+                icon=icon,
+                desc=desc,
+                temp=temp
+            ) + "\n"
+        if not message.strip():
+            message = LANGUAGES[lang]['not_found']
+        safe_send_message(chat_id, message, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Error in send_forecast_for_date: {e}")
+        safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('weather_'))
 def show_city_weather(call):
@@ -684,41 +856,37 @@ def show_settings(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
+
         markup = types.InlineKeyboardMarkup(row_width=1)
-        
-        # Переключатель уведомлений
-        notif_text = "🔔 Выкл. уведомления" if settings['notifications'] else "🔔 Вкл. уведомления"
+        # Локализованный текст для кнопки уведомлений
+        notif_text = LANGUAGES[lang]['notifications_on'] if settings['notifications'] else LANGUAGES[lang]['notifications_off']
         markup.add(types.InlineKeyboardButton(notif_text, callback_data="toggle_notifications"))
-        
         # Время уведомлений
         markup.add(types.InlineKeyboardButton(
-            f"🕐 Время: {settings['notification_time']}", 
+            LANGUAGES[lang]['notification_time'].format(time=settings['notification_time']),
             callback_data="set_notification_time"
         ))
-        
-        # Выбор языка
-        markup.add(types.InlineKeyboardButton("🌍 Язык", callback_data="change_language"))
-        
+        # Выбор языка прямо в настройках
+        lang_buttons = [types.InlineKeyboardButton(code.upper(), callback_data=f"setlang_{code}") for code in LANGUAGES.keys()]
+        markup.add(*lang_buttons)
         # Очистить все города
         if settings.get('saved_cities', []):
-            markup.add(types.InlineKeyboardButton("🗑️ Очистить города", callback_data="clear_cities"))
-        
-        settings_text = f"""⚙️ *Настройки*
+            markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['clear_cities_button'], callback_data="clear_cities"))
 
-🔔 Уведомления: {"включены" if settings['notifications'] else "отключены"}
-🕐 Время: {settings['notification_time']}
-🌍 Язык: {lang.upper()}
-🏙️ Городов сохранено: {len(settings.get('saved_cities', []))}
-🕒 Часовой пояс: {settings.get('timezone', 'UTC')}"""
-        
+        settings_text = LANGUAGES[lang]['settings_menu'].format(
+            notifications=LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off'],
+            time=settings['notification_time'],
+            lang=lang.upper(),
+            cities=len(settings.get('saved_cities', [])),
+            timezone=settings.get('timezone', 'UTC')
+        )
+
         safe_send_message(
             msg.chat.id,
             settings_text,
             parse_mode="Markdown",
             reply_markup=markup
         )
-        
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
 
@@ -750,7 +918,7 @@ def handle_text_message(msg):
             
         # Проверяем длину и содержание - если слишком короткое или содержит много эмодзи
         if len(text) < 2 or len(text) > 100:
-            safe_send_message(msg.chat.id, "🤖 Введите название города или нажмите кнопку 📍 Геолокация")
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['enter_city_or_location'])
             return
         
         # Проверяем погоду для введенного города
@@ -762,7 +930,6 @@ def handle_text_message(msg):
         # Нормализуем название города
         city_name = weather_api.normalize_city_name(weather_data['name'])
         saved_cities = settings.get('saved_cities', [])
-        
         # Добавить город в сохраненные если его там нет
         if city_name not in saved_cities:
             if len(saved_cities) < 5:
@@ -771,7 +938,6 @@ def handle_text_message(msg):
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['city_added'].format(city=city_name))
             else:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
-        
         send_current_weather(msg.chat.id, city_name, lang)
             
     except Exception as e:
@@ -831,31 +997,31 @@ def send_forecast(chat_id: int, city: str, lang: str):
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
-        
+
         # Получаем текущую погоду тоже
         current_data = weather_api.get_current_weather(city, lang)
         if current_data:
             send_current_weather(chat_id, city, lang)
-        
+
         # Формируем прогноз на несколько часов
-        message = f"\n\n🕐 **Почасовой прогноз:**\n"
-        
+        message = "\n\n" + LANGUAGES[lang]['hourly_forecast'] + "\n"
+
         for i, item in enumerate(forecast_data['list'][:8]):  # 8 записей = ~24 часа
             dt = datetime.fromtimestamp(item['dt'])
             hour = dt.strftime('%H')
             temp = round(item['main']['temp'])
             desc = item['weather'][0]['description'].title()
             icon = get_weather_icon(item['weather'][0]['description'])
-            
+
             message += LANGUAGES[lang]['hourly'].format(
                 hour=hour,
                 icon=icon,
                 desc=desc,
                 temp=temp
             ) + "\n"
-        
+
         safe_send_message(chat_id, message, parse_mode="Markdown")
-        
+
     except Exception as e:
         logger.error(f"Error in send_forecast: {e}")
         safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
@@ -918,13 +1084,11 @@ def toggle_notifications(call):
         settings = data_manager.get_user_settings(call.message.chat.id)
         settings['notifications'] = not settings['notifications']
         data_manager.update_user_setting(call.message.chat.id, 'notifications', settings['notifications'])
-        
         lang = settings['language']
-        status = "включены" if settings['notifications'] else "отключены"
-        
-        safe_send_message(call.message.chat.id, f"🔔 Уведомления {status}")
+        status = LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off']
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['notifications_status'].format(status=status))
+        show_settings(call.message)  # Обновить меню
         bot.answer_callback_query(call.id)
-        
     except Exception as e:
         logger.error(f"Error in toggle_notifications: {e}")
 
@@ -933,14 +1097,14 @@ def request_notification_time(call):
     try:
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        
+
         msg = bot.send_message(
             call.message.chat.id,
-            "🕐 Введите время для уведомлений в формате ЧЧ:ММ (например, 08:30):"
+            LANGUAGES[lang]['enter_notification_time_full']
         )
         bot.register_next_step_handler(msg, process_notification_time)
         bot.answer_callback_query(call.id)
-        
+
     except Exception as e:
         logger.error(f"Error in request_notification_time: {e}")
 
@@ -948,9 +1112,9 @@ def process_notification_time(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
+
         time_text = msg.text.strip()
-        
+
         # Проверить формат времени
         try:
             datetime.strptime(time_text, '%H:%M')
@@ -960,14 +1124,16 @@ def process_notification_time(msg):
                 LANGUAGES[lang]['notifications_scheduled'].format(time=time_text)
             )
         except ValueError:
-            safe_send_message(msg.chat.id, "❌ Неверный формат времени. Используйте ЧЧ:ММ")
-            
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_time_format_full'])
+
     except Exception as e:
         logger.error(f"Error in process_notification_time: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "change_language")
 def change_language_menu(call):
     try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
         markup = types.InlineKeyboardMarkup(row_width=3)
         buttons = []
         for code in LANGUAGES.keys():
@@ -975,14 +1141,14 @@ def change_language_menu(call):
                 code.upper(), callback_data=f"setlang_{code}"
             ))
         markup.add(*buttons)
-        
+
         safe_send_message(
             call.message.chat.id,
-            "🌍 Выберите язык:",
+            LANGUAGES[lang]['choose_language'],
             reply_markup=markup
         )
         bot.answer_callback_query(call.id)
-        
+
     except Exception as e:
         logger.error(f"Error in change_language_menu: {e}")
 
@@ -991,47 +1157,50 @@ def change_language(call):
     try:
         new_lang = call.data.split('_')[1]
         data_manager.update_user_setting(call.message.chat.id, 'language', new_lang)
-        
         safe_send_message(
             call.message.chat.id,
-            f"✅ Язык изменен на {new_lang.upper()}",
+            LANGUAGES[new_lang]['language_changed'].format(lang=new_lang.upper()),
             reply_markup=create_main_keyboard(new_lang)
         )
+        show_settings(call.message)  # Обновить меню
         bot.answer_callback_query(call.id)
-        
     except Exception as e:
         logger.error(f"Error in change_language: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "clear_cities")
 def clear_all_cities(call):
     try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
         markup = types.InlineKeyboardMarkup()
         markup.add(
-            types.InlineKeyboardButton("✅ Да, очистить", callback_data="confirm_clear"),
-            types.InlineKeyboardButton("❌ Отмена", callback_data="cancel_clear")
+            types.InlineKeyboardButton(LANGUAGES[lang]['confirm_clear_all_yes'], callback_data="confirm_clear"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['cancel'], callback_data="cancel_clear")
         )
-        
+
         safe_send_message(
             call.message.chat.id,
-            "⚠️ Вы уверены, что хотите удалить все сохраненные города?",
+            LANGUAGES[lang]['confirm_clear_all'],
             reply_markup=markup
         )
         bot.answer_callback_query(call.id)
-        
+
     except Exception as e:
         logger.error(f"Error in clear_all_cities: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data in ["confirm_clear", "cancel_clear"])
 def handle_clear_confirmation(call):
     try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
         if call.data == "confirm_clear":
             data_manager.update_user_setting(call.message.chat.id, 'saved_cities', [])
-            safe_send_message(call.message.chat.id, "🗑️ Все города удалены")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['all_cities_removed'])
         else:
-            safe_send_message(call.message.chat.id, "❌ Отменено")
-            
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['cancelled'])
+
         bot.answer_callback_query(call.id)
-        
+
     except Exception as e:
         logger.error(f"Error in handle_clear_confirmation: {e}")
 
@@ -1041,31 +1210,10 @@ def cmd_help(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
-        help_text = f"""🤖 *WeatherBot 2.0 - Помощь*
 
-🌤️ *Основные функции:*
-• Текущая погода с подробной информацией
-• Прогноз погоды на несколько дней
-• Графики температуры
-• Погодные предупреждения
-• До 5 сохраненных городов
-• Автоматические уведомления
-
-📱 *Как пользоваться:*
-• Отправьте геолокацию или название города
-• Используйте кнопки для быстрого доступа
-• Настройте уведомления в настройках
-• Добавляйте города в избранное
-
-🔧 *Команды:*
-/start - Запуск бота
-/help - Эта справка
-
-💡 *Совет:* Добавьте несколько городов для быстрого доступа к прогнозу!"""
-        
+        help_text = LANGUAGES[lang].get('help_full', LANGUAGES[lang]['help'])
         safe_send_message(msg.chat.id, help_text, parse_mode="Markdown")
-        
+
     except Exception as e:
         logger.error(f"Error in cmd_help: {e}")
 
@@ -1076,12 +1224,12 @@ def handle_unsupported_content(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        
+
         safe_send_message(
             msg.chat.id,
-            "🤖 Я понимаю только текст и геолокацию. Отправьте название города или нажмите кнопку 📍 Геолокация"
+            LANGUAGES[lang]['only_text_location']
         )
-        
+
     except Exception as e:
         logger.error(f"Error in handle_unsupported_content: {e}")
 
