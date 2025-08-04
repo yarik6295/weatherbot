@@ -121,6 +121,9 @@ LANGUAGES = {
         'notifications_off': "🔔 Включить уведомления",
         'notification_time': "🕐 Время: {time}",
         'settings_menu': "⚙️ *Настройки*\n\n🔔 Уведомления: {notifications}\n🕐 Время: {time}\n🌍 Язык: {lang}\n🏙️ Городов сохранено: {cities}\n🕒 Часовой пояс: {timezone}",
+        'choose_notification_city_button': "🔔 Город для уведомлений: {city}",
+        'choose_notification_city': "🔔 Выберите город для ежедневных уведомлений:",
+        'timezone_button': "🌍 Изменить часовой пояс",
         'on': "включены",
         'off': "отключены",
         'notifications_status': "🔔 Уведомления {status}",
@@ -187,6 +190,9 @@ LANGUAGES = {
         'notifications_off': "🔔 Turn on notifications",
         'notification_time': "🕐 Time: {time}",
         'settings_menu': "⚙️ *Settings*\n\n🔔 Notifications: {notifications}\n🕐 Time: {time}\n🌍 Language: {lang}\n🏙️ Saved cities: {cities}\n🕒 Timezone: {timezone}",
+        'choose_notification_city_button': "🔔 Notification city: {city}",
+        'choose_notification_city': "🔔 Choose a city for daily notifications:",
+        'timezone_button': "🌍 Change timezone",
         'on': "on",
         'off': "off",
         'notifications_status': "🔔 Notifications {status}",
@@ -253,6 +259,9 @@ LANGUAGES = {
         'notifications_off': "🔔 Увімкнути сповіщення",
         'notification_time': "🕐 Час: {time}",
         'settings_menu': "⚙️ *Налаштування*\n\n🔔 Сповіщення: {notifications}\n🕐 Час: {time}\n🌍 Мова: {lang}\n🏙️ Збережено міст: {cities}\n🕒 Часовий пояс: {timezone}",
+        'choose_notification_city_button': "🔔 Місто для сповіщень: {city}",
+        'choose_notification_city': "🔔 Оберіть місто для щоденних сповіщень:",
+        'timezone_button': "🌍 Змінити часовий пояс",
         'on': "увімкнено",
         'off': "вимкнено",
         'notifications_status': "🔔 Сповіщення {status}",
@@ -500,8 +509,8 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
-        # При /start очищаем только saved_cities, notification_city и сбрасываем настройки уведомлений
-        data_manager.update_user_setting(msg.chat.id, 'saved_cities', [])
+        # При /start НЕ очищаем saved_cities, чтобы избранные города не терялись
+        # Сбрасываем только настройки уведомлений, но не saved_cities
         data_manager.update_user_setting(msg.chat.id, 'notification_city', None)
         data_manager.update_user_setting(msg.chat.id, 'notification_time', '20:00')
         data_manager.update_user_setting(msg.chat.id, 'notifications', True)
@@ -962,13 +971,13 @@ def show_settings(msg):
         notif_city = settings.get('notification_city')
         notif_city_label = notif_city if notif_city else settings['saved_cities'][0]
         markup.add(types.InlineKeyboardButton(
-            f"🔔 Город для уведомлений: {notif_city_label}",
+            LANGUAGES[lang]['choose_notification_city_button'].format(city=notif_city_label),
             callback_data="choose_notification_city"
         ))
     # Кнопка смены языка
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['choose_language'], callback_data="change_language"))
     # Кнопка смены часового пояса
-    markup.add(types.InlineKeyboardButton("🌍 Изменить часовой пояс", callback_data="change_timezone"))
+    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="change_timezone"))
 
     # Отправляем меню настроек пользователю
     safe_send_message(
@@ -990,40 +999,70 @@ def change_timezone_menu(call):
         bot.answer_callback_query(call.id)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        # Списки популярных поясов для разных языков
-        timezones_dict = {
-            'ru': [
-                "Europe/Minsk", "Europe/Kiev", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
-                "Европа/Берлин", "Европа/Лондон", "Азия/Алматы", "Азия/Бишкек", "Азия/Тбилиси",
-                "Азия/Токио", "Азия/Сеул", "Азия/Шанхай", "Азия/Сингапур", "Азия/Дубай",
-                "Америка/Нью-Йорк", "Америка/Чикаго", "Америка/Денвер", "Америка/Лос-Анджелес", "Америка/Сан-Паулу"
-            ],
-            'en': [
-                "Europe/Minsk", "Europe/Kiev", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
-                "Europe/Berlin", "Europe/London", "Asia/Almaty", "Asia/Bishkek", "Asia/Tbilisi",
-                "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Dubai",
-                "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Sao_Paulo"
-            ],
-            'uk': [
-                "Europe/Minsk", "Europe/Kyiv", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
-                "Європа/Берлін", "Європа/Лондон", "Азія/Алмати", "Азія/Бішкек", "Азія/Тбілісі",
-                "Азія/Токіо", "Азія/Сеул", "Азія/Шанхай", "Азія/Сінгапур", "Азія/Дубай",
-                "Америка/Нью-Йорк", "Америка/Чикаго", "Америка/Денвер", "Америка/Лос-Анджелес", "Америка/Сан-Паулу"
-            ]
+        import pytz
+        from datetime import datetime
+        # Уникальные города/пояса и их UTC-офсеты
+        # Только по одному городу из группы с одинаковым UTC + крупные города с разными UTC
+        # Только уникальные города по часовому поясу
+        tz_cities = [
+            ("Europe/London", "Лондон", 1),  # GMT+1 летом
+            ("Europe/Berlin", "Берлин", 2),  # GMT+2 летом
+            ("Europe/Kiev", "Киев", 3),
+            ("Asia/Dubai", "Дубай", 4),
+            ("Asia/Karachi", "Карачи", 5),  # UTC+5, Пакистан
+            ("Asia/Almaty", "Алматы", 6),   # UTC+6, Казахстан
+            ("Asia/Bangkok", "Бангкок", 7), # UTC+7, Таиланд
+            ("Asia/Shanghai", "Шанхай", 8),
+            ("Asia/Tokyo", "Токио", 9),
+            ("America/New_York", "Нью-Йорк", -4),
+            ("America/Chicago", "Чикаго", -5),
+            ("America/Los_Angeles", "Лос-Анджелес", -7),
+            ("America/Sao_Paulo", "Сан-Паулу", -3),
+            ("Asia/Singapore", "Сингапур", 8),
+            ("Asia/Seoul", "Сеул", 9)
+        ]
+        # Локализация для en/uk
+        city_names = {
+            'ru': {
+                "Киев": "Киев", "Берлин": "Берлин", "Лондон": "Лондон", "Москва": "Москва", "Дубай": "Дубай",
+                "Карачи": "Карачи", "Алматы": "Алматы", "Бангкок": "Бангкок",
+                "Токио": "Токио", "Шанхай": "Шанхай", "Нью-Йорк": "Нью-Йорк", "Чикаго": "Чикаго", "Лос-Анджелес": "Лос-Анджелес",
+                "Сан-Паулу": "Сан-Паулу", "Сингапур": "Сингапур", "Сеул": "Сеул", "Рига": "Рига", "Вильнюс": "Вильнюс", "Таллин": "Таллин", "Тбилиси": "Тбилиси"
+            },
+            'en': {
+                "Киев": "Kyiv", "Берлин": "Berlin", "Лондон": "London", "Москва": "Moscow", "Дубай": "Dubai",
+                "Карачи": "Karachi", "Алматы": "Almaty", "Бангкок": "Bangkok",
+                "Токио": "Tokyo", "Шанхай": "Shanghai", "Нью-Йорк": "New York", "Чикаго": "Chicago", "Лос-Анджелес": "Los Angeles",
+                "Сан-Паулу": "Sao Paulo", "Сингапур": "Singapore", "Сеул": "Seoul", "Рига": "Riga", "Вильнюс": "Vilnius", "Таллин": "Tallinn", "Тбилиси": "Tbilisi"
+            },
+            'uk': {
+                "Киев": "Київ", "Берлин": "Берлін", "Лондон": "Лондон", "Москва": "Москва", "Дубай": "Дубай",
+                "Карачи": "Карачі", "Алматы": "Алмати", "Бангкок": "Бангкок",
+                "Токио": "Токіо", "Шанхай": "Шанхай", "Нью-Йорк": "Нью-Йорк", "Чикаго": "Чикаго", "Лос-Анджелес": "Лос-Анджелес",
+                "Сан-Паулу": "Сан-Паулу", "Сингапур": "Сінгапур", "Сеул": "Сеул", "Рига": "Рига", "Вильнюс": "Вільнюс", "Таллин": "Таллінн", "Тбилиси": "Тбілісі"
+            }
         }
-        timezones = timezones_dict.get(lang, timezones_dict['en'])
         markup = types.InlineKeyboardMarkup(row_width=2)
-        for tz in timezones:
-            markup.add(types.InlineKeyboardButton(tz, callback_data=f"set_timezone_{tz}"))
-        # Сообщения на разных языках
-        tz_msg = {
-            'ru': "🌍 Выберите ваш часовой пояс:",
-            'en': "🌍 Choose your timezone:",
-            'uk': "🌍 Оберіть ваш часовий пояс:"
-        }
+        for tz, city, utc in tz_cities:
+            try:
+                offset = pytz.timezone(tz).utcoffset(datetime.utcnow())
+                if offset is not None:
+                    total_minutes = int(offset.total_seconds() // 60)
+                    hours = total_minutes // 60
+                    minutes = abs(total_minutes) % 60
+                    sign = '+' if hours >= 0 else '-'
+                    offset_str = f"UTC{sign}{abs(hours):02d}:{minutes:02d}" if minutes else f"UTC{sign}{abs(hours):02d}"
+                else:
+                    offset_str = f"UTC+{utc}"
+            except Exception:
+                offset_str = f"UTC+{utc}"
+            city_label = city_names.get(lang, city_names['ru'])[city]
+            markup.add(types.InlineKeyboardButton(f"{city_label} ({offset_str})", callback_data=f"set_timezone_{tz}"))
+        # Сообщение из LANGUAGES
+        choose_tz_msg = LANGUAGES[lang].get('choose_timezone', "🌍 Выберите ваш часовой пояс:")
         safe_send_message(
             call.message.chat.id,
-            tz_msg.get(lang, tz_msg['en']),
+            choose_tz_msg,
             reply_markup=markup
         )
     except Exception as e:
