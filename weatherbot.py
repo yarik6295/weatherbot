@@ -1329,26 +1329,117 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}/{WEBHOOK_PATH}"
 
 app = Flask(__name__)
 
-@app.route(f"/{WEBHOOK_PATH}", methods=["POST"])
+@app.route('/', methods=["POST"])
 def webhook():
-    json_str = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
+    logger.info("[WEBHOOK] Incoming POST request")
+    try:
+        json_str = request.get_data().decode('utf-8')
+        logger.info(f"[WEBHOOK] Raw data: {json_str[:500]}")
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+        logger.info("[WEBHOOK] Update processed successfully")
+    except Exception as e:
+        logger.error(f"[WEBHOOK] Error processing update: {e}")
     return "ok", 200
 
-if __name__ == '__main__':
+@bot.message_handler(commands=['webhookinfo'])
+def cmd_webhookinfo(msg):
+    import requests
     try:
-        logger.info("🚀 Starting WeatherBot 2.0...")
-        # Проверка API
-        test_weather = weather_api.get_current_weather("London", "en")
-        if not test_weather:
-            logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
-        # Запуск планировщика уведомлений в отдельном потоке
-        scheduler_thread = threading.Thread(target=notification_scheduler, daemon=True)
-        scheduler_thread.start()
-        # Запуск Flask (webhook)
-        app.run(host="0.0.0.0", port=8443)
+        url = f"https://api.telegram.org/bot{TOKEN}/getWebhookInfo"
+        resp = requests.get(url, timeout=10)
+        if resp.ok:
+            info = resp.json()
+            safe_send_message(msg.chat.id, f"Webhook info:\n{info}")
+        else:
+            safe_send_message(msg.chat.id, f"Ошибка запроса getWebhookInfo: {resp.status_code}")
     except Exception as e:
-        logger.error(f"💥 Critical error: {e}")
-    finally:
-        logger.info("🛑 WeatherBot 2.0 shutdown complete")
+        safe_send_message(msg.chat.id, f"Ошибка getWebhookInfo: {e}")
+# -- Data Management --
+class DataManager:
+    def __init__(self, filename: str):
+        self.filename = filename
+        self.data = self.load_data()
+    
+    def load_data(self) -> Dict:
+        try:
+            with open(self.filename, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.info(f"Creating new data file: {self.filename}")
+            return {}
+        except Exception as e:
+            logger.error(f"Error loading data: {e}")
+            return {}
+    
+    def save_data(self):
+        try:
+            with open(self.filename, 'w', encoding='utf-8') as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving data: {e}")
+    
+    def get_user_settings(self, chat_id: int) -> Dict:
+        sid = str(chat_id)
+        if sid not in self.data:
+            self.data[sid] = {
+                'language': 'en',
+                'notifications': True,
+                'notification_time': '20:00',
+                'saved_cities': [],
+                'timezone': 'UTC',
+                'last_activity': datetime.now().isoformat(),
+                'notification_city': None
+            }
+            self.save_data()
+        # Миграция для старых пользователей
+        if 'notification_city' not in self.data[sid]:
+            self.data[sid]['notification_city'] = None
+        return self.data[sid]
+    
+    def update_user_setting(self, chat_id: int, key: str, value):
+        settings = self.get_user_settings(chat_id)
+        settings[key] = value
+        settings['last_activity'] = datetime.now().isoformat()
+        self.save_data()
+
+# -- Weather API Manager --
+class WeatherAPI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.openweathermap.org/data/2.5"
+    
+    def normalize_city_name(self, city: str) -> str:
+        """Нормализация названия города для избежания дубликатов"""
+        return city.strip().title()
+    
+    def get_current_weather(self, city: str, lang: str = 'en') -> Optional[Dict]:
+        try:
+            params = {
+                'q': city,
+                'appid': self.api_key,
+                'units': 'metric',
+                'lang': lang
+            }
+            response = requests.get(f"{self.base_url}/weather", params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error fetching current weather: {e}")
+            return None
+    
+    def get_forecast(self, city: str, lang: str = 'en') -> Optional[Dict]:
+        try:
+            params = {
+                'q': city,
+                'appid': self.api_key,
+                'units': 'metric',
+                'lang': lang
+            }
+            response = requests.get(f"{self.base_url}/forecast", params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error fetching forecast: {e}")
+            return None
+    
