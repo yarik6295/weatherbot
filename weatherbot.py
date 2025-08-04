@@ -774,16 +774,25 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
-        # Формируем заголовок
+        # Формируем динамический заголовок
         try:
             date_obj = datetime.strptime(selected_date, "%Y-%m-%d")
         except Exception:
             date_obj = None
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
         if date_obj:
             date_str = date_obj.strftime('%d.%m.%Y')
+            if date_obj.date() == today:
+                day_text = 'на сегодня'
+            elif date_obj.date() == tomorrow:
+                day_text = 'на завтра'
+            else:
+                weekday = LANGUAGES[lang]['weekdays'][date_obj.weekday()] if 'weekdays' in LANGUAGES[lang] else date_obj.strftime('%A')
+                day_text = f"на {weekday} ({date_str})"
         else:
-            date_str = selected_date
-        header = f"*🌤️Прогноз погоды на завтра ({date_str}) в городе 🏙️{city}:*\n\n"
+            day_text = f"на {selected_date}"
+        header = f"🌤️ Прогноз погоды {day_text} в городе {city}:\n\n"
         message = ""
         for item in forecast_data['list']:
             dt = datetime.fromtimestamp(item['dt'])
@@ -803,7 +812,7 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
             message = LANGUAGES[lang]['not_found']
         else:
             message = header + message
-        safe_send_message(chat_id, message, parse_mode="Markdown")
+        safe_send_message(chat_id, message)
     except Exception as e:
         logger.error(f"Error in send_forecast_for_date: {e}")
         safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
@@ -1326,12 +1335,13 @@ def webhook():
 
 if __name__ == '__main__':
     try:
-        bot.remove_webhook()
-        bot.set_webhook(url=f"{WEBHOOK_HOST}/")
-        logger.info(f"✅ Webhook set to {WEBHOOK_HOST}/")
+        logger.info("🚀 Starting WeatherBot 2.0...")
+        # Проверка API
+        test_weather = weather_api.get_current_weather("London", "en")
+        if not test_weather:
+            logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
+        # ...existing code запуска бота и Flask...
     except Exception as e:
-        logger.error(f"❌ Failed to set webhook: {e}")
-
-    port = int(os.getenv("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
+        logger.error(f"💥 Critical error: {e}")
+    finally:
+        logger.info("🛑 WeatherBot 2.0 shutdown complete")
