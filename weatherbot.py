@@ -303,25 +303,29 @@ class DataManager:
         # Создаём индекс по chat_id, если его нет
         self.collection.create_index("chat_id", unique=True)
 
-    def get_user_settings(self, chat_id: int) -> Dict:
+    def get_user_settings(self, chat_id: int) -> dict:
         doc = self.collection.find_one({"chat_id": chat_id})
+        defaults = {
+            "chat_id": chat_id,
+            'language': 'ru',
+            'notifications': False,
+            'notification_time': '20:00',
+            'saved_cities': [],
+            'timezone': 'Europe/Minsk',
+            'last_activity': datetime.now().isoformat(),
+            'notification_city': None
+        }
         if not doc:
-            # Если нет — создаём с дефолтными значениями
-            doc = {
-                "chat_id": chat_id,
-                'language': 'en',
-                'notifications': True,
-                'notification_time': '20:00',
-                'saved_cities': [],
-                'timezone': 'Europe/Minsk',  # UTC+3 по умолчанию
-                'last_activity': datetime.now().isoformat(),
-                'notification_city': None
-            }
-            self.collection.insert_one(doc)
-        # Миграция для старых пользователей
-        if 'notification_city' not in doc:
-            doc['notification_city'] = None
-            self.collection.update_one({"chat_id": chat_id}, {"$set": {"notification_city": None}})
+            self.collection.insert_one(defaults)
+            return defaults
+        # Миграция для старых пользователей: добавляем недостающие поля
+        updated = False
+        for k, v in defaults.items():
+            if k not in doc:
+                doc[k] = v
+                updated = True
+        if updated:
+            self.collection.update_one({"chat_id": chat_id}, {"$set": doc})
         return doc
 
     def update_user_setting(self, chat_id: int, key: str, value):
