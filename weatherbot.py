@@ -40,6 +40,7 @@ OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 MONGO_CONNECTION_STRING = os.getenv("MONGO_CONNECTION_STRING")
 MONGO_DB_NAME = "weatherbot"
 MONGO_COLLECTION = "users"
+mongo_uri = os.getenv("MONGO_URI")
 
 if not TOKEN or not OWM_API_KEY:
     logger.error("❌ Установи переменные окружения TELEGRAM_BOT_TOKEN и OPENWEATHER_API_KEY!")
@@ -1486,4 +1487,3 @@ if __name__ == '__main__':
         logger.error(f"💥 Critical error: {e}")
     finally:
         logger.info("🛑 WeatherBot 2.0 shutdown complete")
-
