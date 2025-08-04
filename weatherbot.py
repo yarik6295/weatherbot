@@ -311,7 +311,7 @@ class DataManager:
                 'notifications': True,
                 'notification_time': '20:00',
                 'saved_cities': [],
-                'timezone': 'UTC',
+                'timezone': 'Europe/Minsk',  # UTC+3 по умолчанию
                 'last_activity': datetime.now().isoformat(),
                 'notification_city': None
             }
@@ -947,46 +947,84 @@ def process_new_city(msg):
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['settings_button'] for lang in LANGUAGES.keys()))
 def show_settings(msg):
-    try:
-        settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+    settings = data_manager.get_user_settings(msg.chat.id)
+    lang = settings['language']
 
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        notif_text = LANGUAGES[lang]['notifications_on'] if settings['notifications'] else LANGUAGES[lang]['notifications_off']
-        markup.add(types.InlineKeyboardButton(notif_text, callback_data="toggle_notifications"))
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    notif_text = LANGUAGES[lang]['notifications_on'] if settings['notifications'] else LANGUAGES[lang]['notifications_off']
+    markup.add(types.InlineKeyboardButton(notif_text, callback_data="toggle_notifications"))
+    markup.add(types.InlineKeyboardButton(
+        LANGUAGES[lang]['notification_time'].format(time=settings['notification_time']),
+        callback_data="set_notification_time"
+    ))
+    # Кнопка выбора города для уведомлений
+    if settings.get('saved_cities', []):
+        notif_city = settings.get('notification_city')
+        notif_city_label = notif_city if notif_city else settings['saved_cities'][0]
         markup.add(types.InlineKeyboardButton(
-            LANGUAGES[lang]['notification_time'].format(time=settings['notification_time']),
-            callback_data="set_notification_time"
+            f"🔔 Город для уведомлений: {notif_city_label}",
+            callback_data="choose_notification_city"
         ))
-        # Кнопка выбора города для уведомлений
-        if settings.get('saved_cities', []):
-            notif_city = settings.get('notification_city')
-            notif_city_label = notif_city if notif_city else settings['saved_cities'][0]
-            markup.add(types.InlineKeyboardButton(
-                f"🔔 Город для уведомлений: {notif_city_label}",
-                callback_data="choose_notification_city"
-            ))
-        # Кнопка смены языка
-        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['choose_language'], callback_data="change_language"))
-        if settings.get('saved_cities', []):
-            markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['clear_cities_button'], callback_data="clear_cities"))
-
-        settings_text = LANGUAGES[lang]['settings_menu'].format(
-            notifications=LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off'],
-            time=settings['notification_time'],
-            lang=lang.upper(),
-            cities=len(settings.get('saved_cities', [])),
-            timezone=settings.get('timezone', 'UTC')
-        )
-
+    # Кнопка смены языка
+    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['choose_language'], callback_data="change_language"))
+    # Кнопка смены часового пояса
+    markup.add(types.InlineKeyboardButton("🌍 Изменить часовой пояс", callback_data="change_timezone"))
+# --- Выбор часового пояса ---
+@bot.callback_query_handler(func=lambda call: call.data == "change_timezone")
+def change_timezone_menu(call):
+    try:
+        bot.answer_callback_query(call.id)
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        # Списки популярных поясов для разных языков
+        timezones_dict = {
+            'ru': [
+                "Europe/Minsk", "Europe/Kiev", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
+                "Европа/Берлин", "Европа/Лондон", "Азия/Алматы", "Азия/Бишкек", "Азия/Тбилиси",
+                "Азия/Токио", "Азия/Сеул", "Азия/Шанхай", "Азия/Сингапур", "Азия/Дубай",
+                "Америка/Нью-Йорк", "Америка/Чикаго", "Америка/Денвер", "Америка/Лос-Анджелес", "Америка/Сан-Паулу"
+            ],
+            'en': [
+                "Europe/Minsk", "Europe/Kiev", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
+                "Europe/Berlin", "Europe/London", "Asia/Almaty", "Asia/Bishkek", "Asia/Tbilisi",
+                "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Dubai",
+                "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Sao_Paulo"
+            ],
+            'uk': [
+                "Europe/Minsk", "Europe/Kyiv", "Europe/Riga", "Europe/Vilnius", "Europe/Tallinn",
+                "Європа/Берлін", "Європа/Лондон", "Азія/Алмати", "Азія/Бішкек", "Азія/Тбілісі",
+                "Азія/Токіо", "Азія/Сеул", "Азія/Шанхай", "Азія/Сінгапур", "Азія/Дубай",
+                "Америка/Нью-Йорк", "Америка/Чикаго", "Америка/Денвер", "Америка/Лос-Анджелес", "Америка/Сан-Паулу"
+            ]
+        }
+        timezones = timezones_dict.get(lang, timezones_dict['en'])
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for tz in timezones:
+            markup.add(types.InlineKeyboardButton(tz, callback_data=f"set_timezone_{tz}"))
+        # Сообщения на разных языках
+        tz_msg = {
+            'ru': "🌍 Выберите ваш часовой пояс:",
+            'en': "🌍 Choose your timezone:",
+            'uk': "🌍 Оберіть ваш часовий пояс:"
+        }
         safe_send_message(
-            msg.chat.id,
-            settings_text,
-            parse_mode="Markdown",
+            call.message.chat.id,
+            tz_msg.get(lang, tz_msg['en']),
             reply_markup=markup
         )
     except Exception as e:
-        logger.error(f"Error in show_settings: {e}")
+        logger.error(f"Error in change_timezone_menu: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("set_timezone_"))
+def set_timezone(call):
+    try:
+        tz = call.data.replace("set_timezone_", "")
+        data_manager.update_user_setting(call.message.chat.id, 'timezone', tz)
+        safe_send_message(call.message.chat.id, f"✅ Часовой пояс установлен: {tz}")
+        show_settings(call.message)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in set_timezone: {e}")
 
 @bot.message_handler(func=lambda m: True)
 def handle_text_message(msg):
