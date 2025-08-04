@@ -1343,7 +1343,11 @@ if __name__ == '__main__':
         test_weather = weather_api.get_current_weather("London", "en")
         if not test_weather:
             logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
-        # ...existing code запуска бота и Flask...
+        # Запуск планировщика уведомлений в отдельном потоке
+        scheduler_thread = threading.Thread(target=notification_scheduler, daemon=True)
+        scheduler_thread.start()
+        # Запуск Flask (webhook)
+        app.run(host="0.0.0.0", port=8443)
     except Exception as e:
         logger.error(f"💥 Critical error: {e}")
     finally:
