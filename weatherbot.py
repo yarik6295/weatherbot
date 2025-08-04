@@ -413,8 +413,8 @@ class ChartGenerator:
         matplotlib.use('Agg')
         plt.ioff()
         try:
-            # Устанавливаем шрифт, который поддерживает эмодзи
-            plt.rcParams['font.family'] = ['DejaVu Sans', 'Arial Unicode MS', 'Noto Color Emoji']
+            # Используем только стандартный шрифт, чтобы не было предупреждений
+            plt.rcParams['font.family'] = ['DejaVu Sans']
             
             plt.style.use('dark_background')
             fig, ax = plt.subplots(figsize=(12, 6))
