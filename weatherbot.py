@@ -1259,7 +1259,7 @@ def send_notifications():
                 send_forecast_for_date(chat_id, city, lang, tomorrow)
                 data_manager.update_user_setting(chat_id, last_date_key, today_str)
             except Exception as e:
-                logger.error(f"Error sending notification to {chat_id_str}: {e}")
+                logger.error(f"Error sending notification to {str(chat_id)}: {e}")
         else:
             logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} - not time yet (user_now={user_now.strftime('%H:%M')}, notif_time={notification_time})")
             if last_sent and last_sent != today_str:
@@ -1465,7 +1465,7 @@ if __name__ == '__main__':
     def init_background_tasks():
         try:
             # Проверка API
-            test_weather = weather_api.get_current_weather("London", "en")
+            test_weather = weather_api.current("London", "en")
             if not test_weather:
                 logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
 
