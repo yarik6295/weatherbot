@@ -812,9 +812,10 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
             message = LANGUAGES[lang]['not_found']
         else:
             message = header + message
+        logger.info(f"[NOTIFY] chat_id={chat_id} city={city} lang={lang} date={selected_date} message_len={len(message)} message_preview={message[:100]}")
         safe_send_message(chat_id, message)
     except Exception as e:
-        logger.error(f"Error in send_forecast_for_date: {e}")
+        logger.error(f"Error in send_forecast_for_date: {e} | chat_id={chat_id} city={city} lang={lang} date={selected_date}")
         safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
 
 
@@ -1332,15 +1333,16 @@ def webhook():
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "ok", 200
+
 if __name__ == '__main__':
     try:
-        bot.remove_webhook()
-        bot.set_webhook(url=f"{WEBHOOK_HOST}/")
-        logger.info(f"✅ Webhook set to {WEBHOOK_HOST}/")
+        logger.info("🚀 Starting WeatherBot 2.0...")
+        # Проверка API
+        test_weather = weather_api.get_current_weather("London", "en")
+        if not test_weather:
+            logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
+        # ...existing code запуска бота и Flask...
     except Exception as e:
-        logger.error(f"❌ Failed to set webhook: {e}")
-
-    port = int(os.getenv("PORT", 10000))
-    logger.info(f"🌐 Starting Flask server on port {port}...")
-    app.run(host="0.0.0.0", port=port)
-
+        logger.error(f"💥 Critical error: {e}")
+    finally:
+        logger.info("🛑 WeatherBot 2.0 shutdown complete")
