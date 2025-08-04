@@ -8,3 +8,4 @@ pytz
 timezonefinder
 matplotlib
 urllib3
+pymongo
