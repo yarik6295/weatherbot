@@ -1115,38 +1115,40 @@ def send_forecast(chat_id: int, city: str, lang: str):
 
 # -- Notification System --
 def send_notifications():
-    try:
-        from datetime import timezone
-        utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        for chat_id_str, settings in data_manager.data.items():
-            try:
-                if not settings.get('notifications', False):
-                    continue
-                chat_id = int(chat_id_str)
-                timezone_str = settings.get('timezone', 'UTC')
-                saved_cities = settings.get('saved_cities', [])
-                lang = settings.get('language', 'en')
-                if not saved_cities:
-                    continue
-                try:
-                    user_tz = pytz.timezone(timezone_str)
-                    user_time = utc_now.astimezone(user_tz)
-                    notif_time = settings.get('notification_time', '20:00')
-                    if user_time.strftime('%H:%M') == notif_time:
-                        notif_city = settings.get('notification_city')
-                        if notif_city and notif_city in saved_cities:
-                            city_for_notif = notif_city
-                        else:
-                            city_for_notif = saved_cities[0]
-                        tomorrow = (user_time + timedelta(days=1)).strftime('%Y-%m-%d')
-                        send_forecast_for_date(chat_id, city_for_notif, lang, tomorrow)
-                        time.sleep(1)
-                except Exception as tz_e:
-                    logger.error(f"Timezone error for {chat_id_str}: {tz_e}")
-            except Exception as e:
-                logger.error(f"Error sending notification to {chat_id_str}: {e}")
-    except Exception as e:
-        logger.error(f"Error in notification system: {e}")
+    from datetime import timezone
+    import pytz
+    utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    for chat_id_str, settings in data_manager.data.items():
+        if not settings.get('notifications', False):
+            continue
+        chat_id = int(chat_id_str)
+        timezone_str = settings.get('timezone', 'UTC')
+        saved_cities = settings.get('saved_cities', [])
+        lang = settings.get('language', 'en')
+        notification_time = settings.get('notification_time', '20:00')
+        notification_city = settings.get('notification_city')
+        if not saved_cities:
+            logger.info(f"[NOTIFY] chat_id={chat_id} - no saved cities, skip")
+            continue
+        # Определяем город для уведомления
+        city = notification_city if notification_city in saved_cities else saved_cities[0]
+        # Получаем локальное время пользователя
+        try:
+            user_tz = pytz.timezone(timezone_str)
+        except Exception as tz_e:
+            logger.warning(f"[NOTIFY] chat_id={chat_id} - invalid timezone {timezone_str}, fallback to UTC: {tz_e}")
+            user_tz = pytz.UTC
+        user_now = utc_now.astimezone(user_tz)
+        # Сравниваем время (часы:минуты)
+        if user_now.strftime('%H:%M') != notification_time:
+            continue
+        # Отправляем прогноз на завтра
+        tomorrow = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
+        logger.info(f"[NOTIFY] Sending forecast to chat_id={chat_id} city={city} lang={lang} date={tomorrow} tz={timezone_str} user_now={user_now.strftime('%Y-%m-%d %H:%M')} notif_time={notification_time}")
+        try:
+            send_forecast_for_date(chat_id, city, lang, tomorrow)
+        except Exception as e:
+            logger.error(f"Error sending notification to {chat_id_str}: {e}")
 
 def notification_scheduler():
     """Планировщик уведомлений"""
