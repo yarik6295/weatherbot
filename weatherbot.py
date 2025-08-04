@@ -37,7 +37,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 # MongoDB Atlas connection string (вставьте свой)
-MONGO_CONNECTION_STRING = "YOUR_MONGODB_ATLAS_CONNECTION_STRING"
+MONGO_CONNECTION_STRING = os.getenv("MONGO_CONNECTION_STRING")
 MONGO_DB_NAME = "weatherbot"
 MONGO_COLLECTION = "users"
 
