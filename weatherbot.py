@@ -1117,7 +1117,6 @@ def send_forecast(chat_id: int, city: str, lang: str):
 # -- Notification System --
 def send_notifications():
     from datetime import timezone
-    import pytz
     utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     for chat_id_str, settings in data_manager.data.items():
         if not settings.get('notifications', False):
@@ -1131,25 +1130,35 @@ def send_notifications():
         if not saved_cities:
             logger.info(f"[NOTIFY] chat_id={chat_id} - no saved cities, skip")
             continue
-        # Определяем город для уведомления
         city = notification_city if notification_city in saved_cities else saved_cities[0]
-        # Получаем локальное время пользователя
         try:
             user_tz = pytz.timezone(timezone_str)
         except Exception as tz_e:
             logger.warning(f"[NOTIFY] chat_id={chat_id} - invalid timezone {timezone_str}, fallback to UTC: {tz_e}")
             user_tz = pytz.UTC
         user_now = utc_now.astimezone(user_tz)
-        # Сравниваем время (часы:минуты)
-        if user_now.strftime('%H:%M') != notification_time:
-            continue
-        # Отправляем прогноз на завтра
-        tomorrow = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
-        logger.info(f"[NOTIFY] Sending forecast to chat_id={chat_id} city={city} lang={lang} date={tomorrow} tz={timezone_str} user_now={user_now.strftime('%Y-%m-%d %H:%M')} notif_time={notification_time}")
-        try:
-            send_forecast_for_date(chat_id, city, lang, tomorrow)
-        except Exception as e:
-            logger.error(f"Error sending notification to {chat_id_str}: {e}")
+        # Проверяем, не отправляли ли уже сегодня уведомление
+        last_date_key = 'last_notification_date'
+        today_str = user_now.strftime('%Y-%m-%d')
+        last_sent = settings.get(last_date_key)
+        # Проверяем точное совпадение времени (минуты)
+        notif_hour, notif_minute = map(int, notification_time.split(':'))
+        if (user_now.hour, user_now.minute) == (notif_hour, notif_minute):
+            if last_sent == today_str:
+                continue  # Уже отправляли сегодня
+            # Отправляем прогноз на завтра
+            tomorrow = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
+            logger.info(f"[NOTIFY] Sending forecast to chat_id={chat_id} city={city} lang={lang} date={tomorrow} tz={timezone_str} user_now={user_now.strftime('%Y-%m-%d %H:%M')} notif_time={notification_time}")
+            try:
+                send_forecast_for_date(chat_id, city, lang, tomorrow)
+                # Сохраняем дату отправки
+                data_manager.update_user_setting(chat_id, last_date_key, today_str)
+            except Exception as e:
+                logger.error(f"Error sending notification to {chat_id_str}: {e}")
+        else:
+            # Сбросить last_notification_date если время ушло (чтобы завтра снова отправить)
+            if last_sent and last_sent != today_str:
+                data_manager.update_user_setting(chat_id, last_date_key, None)
 
 def notification_scheduler():
     """Планировщик уведомлений"""
