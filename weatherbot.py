@@ -969,6 +969,20 @@ def show_settings(msg):
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['choose_language'], callback_data="change_language"))
     # Кнопка смены часового пояса
     markup.add(types.InlineKeyboardButton("🌍 Изменить часовой пояс", callback_data="change_timezone"))
+
+    # Отправляем меню настроек пользователю
+    safe_send_message(
+        msg.chat.id,
+        LANGUAGES[lang]['settings_menu'].format(
+            notifications=LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off'],
+            time=settings['notification_time'],
+            lang=lang.upper(),
+            cities=len(settings.get('saved_cities', [])),
+            timezone=settings.get('timezone', 'Europe/Minsk')
+        ),
+        parse_mode="Markdown",
+        reply_markup=markup
+    )
 # --- Выбор часового пояса ---
 @bot.callback_query_handler(func=lambda call: call.data == "change_timezone")
 def change_timezone_menu(call):
