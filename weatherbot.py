@@ -7,6 +7,7 @@ import matplotlib.dates as mdates
 import telebot
 import requests
 import json
+from pymongo import MongoClient
 import schedule
 import time
 from datetime import datetime, timedelta
@@ -34,7 +35,11 @@ logger = logging.getLogger(__name__)
 # Получаем токены из переменных окружения для безопасности
 TOKEN = os.getenv("BOT_TOKEN")
 OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-DATA_FILE = 'user_data.json'
+
+# MongoDB Atlas connection string (вставьте свой)
+MONGO_CONNECTION_STRING = "YOUR_MONGODB_ATLAS_CONNECTION_STRING"
+MONGO_DB_NAME = "weatherbot"
+MONGO_COLLECTION = "users"
 
 if not TOKEN or not OWM_API_KEY:
     logger.error("❌ Установи переменные окружения TELEGRAM_BOT_TOKEN и OPENWEATHER_API_KEY!")
@@ -290,32 +295,19 @@ import logging
 
 # -- Data Management --
 class DataManager:
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.data = self.load_data()
-    
-    def load_data(self) -> Dict:
-        try:
-            with open(self.filename, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            logger.info(f"Creating new data file: {self.filename}")
-            return {}
-        except Exception as e:
-            logger.error(f"Error loading data: {e}")
-            return {}
-    
-    def save_data(self):
-        try:
-            with open(self.filename, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving data: {e}")
-    
+    def __init__(self, mongo_uri: str, db_name: str, collection_name: str):
+        self.client = MongoClient(mongo_uri)
+        self.db = self.client[db_name]
+        self.collection = self.db[collection_name]
+        # Создаём индекс по chat_id, если его нет
+        self.collection.create_index("chat_id", unique=True)
+
     def get_user_settings(self, chat_id: int) -> Dict:
-        sid = str(chat_id)
-        if sid not in self.data:
-            self.data[sid] = {
+        doc = self.collection.find_one({"chat_id": chat_id})
+        if not doc:
+            # Если нет — создаём с дефолтными значениями
+            doc = {
+                "chat_id": chat_id,
                 'language': 'en',
                 'notifications': True,
                 'notification_time': '20:00',
@@ -324,17 +316,21 @@ class DataManager:
                 'last_activity': datetime.now().isoformat(),
                 'notification_city': None
             }
-            self.save_data()
+            self.collection.insert_one(doc)
         # Миграция для старых пользователей
-        if 'notification_city' not in self.data[sid]:
-            self.data[sid]['notification_city'] = None
-        return self.data[sid]
-    
+        if 'notification_city' not in doc:
+            doc['notification_city'] = None
+            self.collection.update_one({"chat_id": chat_id}, {"$set": {"notification_city": None}})
+        return doc
+
     def update_user_setting(self, chat_id: int, key: str, value):
-        settings = self.get_user_settings(chat_id)
-        settings[key] = value
-        settings['last_activity'] = datetime.now().isoformat()
-        self.save_data()
+        # Обновляем только одно поле, но last_activity всегда обновляем
+        update = {key: value, 'last_activity': datetime.now().isoformat()}
+        self.collection.update_one(
+            {"chat_id": chat_id},
+            {"$set": update},
+            upsert=True
+        )
 
 # -- Weather API Manager --
 class WeatherAPI:
@@ -477,7 +473,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-data_manager = DataManager(DATA_FILE)
+# Инициализация DataManager с MongoDB
+data_manager = DataManager(MONGO_CONNECTION_STRING, MONGO_DB_NAME, MONGO_COLLECTION)
 weather_api = WeatherAPI(OWM_API_KEY)
 
 # -- Helper Functions --
