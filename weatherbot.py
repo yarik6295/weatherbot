@@ -1221,8 +1221,9 @@ def send_forecast(chat_id: int, city: str, lang: str):
 def send_notifications():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    for chat_id_str, settings in data_manager.data.items():
-        chat_id = int(chat_id_str)
+    for user in data_manager.collection.find({}):
+        chat_id = user["chat_id"]
+        settings = data_manager.get_user_settings(chat_id)
         timezone_str = settings.get('timezone', 'UTC')
         saved_cities = settings.get('saved_cities', [])
         lang = settings.get('language', 'en')
