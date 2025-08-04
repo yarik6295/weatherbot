@@ -1454,24 +1454,36 @@ def healthcheck():
     return "ok", 200
 
 if __name__ == '__main__':
+    logger.info("🚀 Starting WeatherBot 2.0...")
+
+    def init_background_tasks():
+        try:
+            # Проверка API
+            test_weather = weather_api.get_current_weather("London", "en")
+            if not test_weather:
+                logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
+
+            # Устанавливаем webhook для Telegram
+            set_hook = bot.set_webhook(url=WEBHOOK_URL)
+            if set_hook:
+                logger.info(f"✅ Webhook set to {WEBHOOK_URL}")
+            else:
+                logger.error(f"❌ Failed to set webhook to {WEBHOOK_URL}")
+
+            # Запуск планировщика уведомлений
+            scheduler_thread = threading.Thread(target=notification_scheduler, daemon=True)
+            scheduler_thread.start()
+        except Exception as e:
+            logger.error(f"💥 Background init error: {e}")
+
+    # Запускаем фоновые задачи без блокировки Flask
+    threading.Thread(target=init_background_tasks, daemon=True).start()
+
     try:
-        logger.info("🚀 Starting WeatherBot 2.0...")
-        # Проверка API
-        test_weather = weather_api.get_current_weather("London", "en")
-        if not test_weather:
-            logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
-        # Устанавливаем webhook для Telegram
-        set_hook = bot.set_webhook(url=WEBHOOK_URL)
-        if set_hook:
-            logger.info(f"✅ Webhook set to {WEBHOOK_URL}")
-        else:
-            logger.error(f"❌ Failed to set webhook to {WEBHOOK_URL}")
-        # Запуск планировщика уведомлений в отдельном потоке
-        scheduler_thread = threading.Thread(target=notification_scheduler, daemon=True)
-        scheduler_thread.start()
-        # Запуск Flask (webhook)
+        # Flask стартует сразу
         app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
     except Exception as e:
         logger.error(f"💥 Critical error: {e}")
     finally:
         logger.info("🛑 WeatherBot 2.0 shutdown complete")
+
