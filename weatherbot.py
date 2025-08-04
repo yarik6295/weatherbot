@@ -277,6 +277,8 @@ LANGUAGES = {
         'weather_chart': "Графік температури"
     }
 }
+import logging
+
 # -- Data Management --
 class DataManager:
     def __init__(self, filename: str):
@@ -457,7 +459,15 @@ class ChartGenerator:
             logger.error(f"Error creating chart: {e}")
             return None
 
-# -- Initialize managers --
+
+# --- Logging config: только консоль ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
 data_manager = DataManager(DATA_FILE)
 weather_api = WeatherAPI(OWM_API_KEY)
 
@@ -956,8 +966,8 @@ def show_settings(msg):
                 f"🔔 Город для уведомлений: {notif_city_label}",
                 callback_data="choose_notification_city"
             ))
-        lang_buttons = [types.InlineKeyboardButton(code.upper(), callback_data=f"setlang_{code}") for code in LANGUAGES.keys()]
-        markup.add(*lang_buttons)
+        # Кнопка смены языка
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['choose_language'], callback_data="change_language"))
         if settings.get('saved_cities', []):
             markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['clear_cities_button'], callback_data="clear_cities"))
 
@@ -1119,44 +1129,45 @@ def send_notifications():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     for chat_id_str, settings in data_manager.data.items():
-        if not settings.get('notifications', False):
-            continue
         chat_id = int(chat_id_str)
         timezone_str = settings.get('timezone', 'UTC')
         saved_cities = settings.get('saved_cities', [])
         lang = settings.get('language', 'en')
         notification_time = settings.get('notification_time', '20:00')
         notification_city = settings.get('notification_city')
+        last_date_key = 'last_notification_date'
+        last_sent = settings.get(last_date_key)
+        # Логируем все параметры пользователя
+        logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} tz={timezone_str} notif_time={notification_time} saved_cities={saved_cities} notif_city={notification_city} last_sent={last_sent} notifications={settings.get('notifications', False)}")
+        if not settings.get('notifications', False):
+            logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} - notifications off")
+            continue
         if not saved_cities:
-            logger.info(f"[NOTIFY] chat_id={chat_id} - no saved cities, skip")
+            logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} - no saved cities, skip")
             continue
         city = notification_city if notification_city in saved_cities else saved_cities[0]
         try:
             user_tz = pytz.timezone(timezone_str)
         except Exception as tz_e:
-            logger.warning(f"[NOTIFY] chat_id={chat_id} - invalid timezone {timezone_str}, fallback to UTC: {tz_e}")
+            logger.warning(f"[NOTIFY-DEBUG] chat_id={chat_id} - invalid timezone {timezone_str}, fallback to UTC: {tz_e}")
             user_tz = pytz.UTC
         user_now = utc_now.astimezone(user_tz)
-        # Проверяем, не отправляли ли уже сегодня уведомление
-        last_date_key = 'last_notification_date'
         today_str = user_now.strftime('%Y-%m-%d')
-        last_sent = settings.get(last_date_key)
-        # Проверяем точное совпадение времени (минуты)
         notif_hour, notif_minute = map(int, notification_time.split(':'))
+        logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} user_now={user_now.strftime('%Y-%m-%d %H:%M')} notif_time={notification_time} notif_hour={notif_hour} notif_minute={notif_minute}")
         if (user_now.hour, user_now.minute) == (notif_hour, notif_minute):
             if last_sent == today_str:
+                logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} - already sent today")
                 continue  # Уже отправляли сегодня
-            # Отправляем прогноз на завтра
             tomorrow = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
             logger.info(f"[NOTIFY] Sending forecast to chat_id={chat_id} city={city} lang={lang} date={tomorrow} tz={timezone_str} user_now={user_now.strftime('%Y-%m-%d %H:%M')} notif_time={notification_time}")
             try:
                 send_forecast_for_date(chat_id, city, lang, tomorrow)
-                # Сохраняем дату отправки
                 data_manager.update_user_setting(chat_id, last_date_key, today_str)
             except Exception as e:
                 logger.error(f"Error sending notification to {chat_id_str}: {e}")
         else:
-            # Сбросить last_notification_date если время ушло (чтобы завтра снова отправить)
+            logger.info(f"[NOTIFY-DEBUG] chat_id={chat_id} - not time yet (user_now={user_now.strftime('%H:%M')}, notif_time={notification_time})")
             if last_sent and last_sent != today_str:
                 data_manager.update_user_setting(chat_id, last_date_key, None)
 
