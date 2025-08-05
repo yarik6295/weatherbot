@@ -155,7 +155,7 @@ LANGUAGES = {
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        'welcome': "🌤️ *Welcome to WeatherBot 2.0!*\n\n✨ What's new:\n🏙️ Multiple cities\n📊 Temperature charts\n🚨 Weather alerts\n\nChoose your language:",
+        'welcome': "👋 *Welcome to MeteoBox📦🌦️!*\n\n✨ What I can do:\n🌦️ 🌝 5-day weather forecast\n📊 🌡️ 5-day temperature charts\n🏙️ 📍 Weather in any city\n🚨 Weather warnings\n🔔 💬 Auto-notifications about tomorrow's weather\n\nSelect language:",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
         'cities_button': "🏙️ My Cities",
@@ -224,7 +224,7 @@ LANGUAGES = {
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
-        'welcome': "🌤️ *Ласкаво просимо до WeatherBot 2.0!*\n\n✨ Новинки:\n🏙️ Декілька міст\n📊 Графіки температури\n🚨 Погодні попередження\n\nОберіть мову:",
+        'welcome': "👋 *Вітаємо в MeteoBox📦🌦️!*\n\n✨ Що я вмію:\n🌦️ 🌝 Прогноз погоди на 5 днів\n📊 🌡️ Графіки температури на 5 днів\n🏙️ 📍 Погода в будь-якому місті 💬 Авто-сповіщення про погоду на завтра\n\nОберіть мову:",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
         'cities_button': "🏙️ Мої міста",
