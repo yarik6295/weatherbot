@@ -1011,7 +1011,6 @@ def change_timezone_menu(call):
             ("Europe/Berlin", "Берлин", 2),  # GMT+2 летом
             ("Europe/Kiev", "Киев", 3),
             ("Asia/Dubai", "Дубай", 4),
-            ("Asia/Karachi", "Карачи", 5),  # UTC+5, Пакистан
             ("Asia/Almaty", "Алматы", 6),   # UTC+6, Казахстан
             ("Asia/Bangkok", "Бангкок", 7), # UTC+7, Таиланд
             ("Asia/Shanghai", "Шанхай", 8),
@@ -1020,8 +1019,6 @@ def change_timezone_menu(call):
             ("America/Chicago", "Чикаго", -5),
             ("America/Los_Angeles", "Лос-Анджелес", -7),
             ("America/Sao_Paulo", "Сан-Паулу", -3),
-            ("Asia/Singapore", "Сингапур", 8),
-            ("Asia/Seoul", "Сеул", 9)
         ]
         # Локализация для en/uk
         city_names = {
