@@ -49,6 +49,19 @@ if not TOKEN or not OWM_API_KEY:
 bot = telebot.TeleBot(TOKEN)
 tf = TimezoneFinder()
 
+def self_ping():
+    url = os.environ.get("SELF_URL")
+    if not url:
+        print("[PING] SELF_URL not set.")
+        return
+    while True:
+        try:
+            requests.get(url)
+            print(f"[PING] Successfully pinged {url}")
+        except Exception as e:
+            print(f"[PING] Error: {e}")
+        time.sleep(300)  # каждые 5 минут
+
 try:
     import ssl
     ssl_context = ssl.create_default_context()
