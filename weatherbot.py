@@ -970,7 +970,7 @@ def show_settings(msg):
     ))
     # Кнопка выбора города для уведомлений
     if settings.get('saved_cities', []):
-        notif_city = settings.get('notification_city')
+        notif_city = settings.get("notification_city") or (settings.get("saved_cities") or [None])[0]
         notif_city_label = notif_city if notif_city else settings['saved_cities'][0]
         markup.add(types.InlineKeyboardButton(
             LANGUAGES[lang]['choose_notification_city_button'].format(city=notif_city_label),
