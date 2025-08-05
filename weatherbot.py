@@ -1267,6 +1267,7 @@ def send_notifications():
 
 def notification_scheduler():
     """Планировщик уведомлений"""
+    print("📡 Notification scheduler started.")
     schedule.every().minute.do(send_notifications)
     
     while True:
@@ -1465,9 +1466,13 @@ if __name__ == '__main__':
     def init_background_tasks():
         try:
             # Проверка API
-            test_weather = weather_api.current("London", "en")
-            if not test_weather:
-                logger.error("❌ Cannot connect to OpenWeather API. Check your API key!")
+            try:
+                test_forecast = weather_api.get_forecast("London", "en")
+                if not test_forecast:
+                    logger.error("❌ OpenWeather API returned empty forecast. Check your API key or quota.")
+            except Exception as test_e:
+                logger.error(f"❌ OpenWeather API check failed: {test_e}")
+
 
             # Устанавливаем webhook для Telegram
             set_hook = bot.set_webhook(url=WEBHOOK_URL)
