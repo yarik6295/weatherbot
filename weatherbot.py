@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import telebot
 import requests
-import json
 from pymongo import MongoClient
 import schedule
 import time
@@ -32,6 +31,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def self_ping():
+    url = os.environ.get("SELF_URL")
+    if not url:
+        print("[PING] SELF_URL not set.")
+        return
+    while True:
+        try:
+            requests.get(url)
+            print(f"[PING] Successfully pinged {url}")
+        except Exception as e:
+            print(f"[PING] Error: {e}")
+        time.sleep(300)  # каждые 5 минут
+
 # Получаем токены из переменных окружения для безопасности
 TOKEN = os.getenv("BOT_TOKEN")
 OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
@@ -48,19 +61,6 @@ if not TOKEN or not OWM_API_KEY:
 
 bot = telebot.TeleBot(TOKEN)
 tf = TimezoneFinder()
-
-def self_ping():
-    url = os.environ.get("SELF_URL")
-    if not url:
-        print("[PING] SELF_URL not set.")
-        return
-    while True:
-        try:
-            requests.get(url)
-            print(f"[PING] Successfully pinged {url}")
-        except Exception as e:
-            print(f"[PING] Error: {e}")
-        time.sleep(300)  # каждые 5 минут
 
 try:
     import ssl
@@ -1496,6 +1496,8 @@ if __name__ == '__main__':
             scheduler_thread.start()
         except Exception as e:
             logger.error(f"💥 Background init error: {e}")
+
+    threading.Thread(target=self_ping, daemon=True).start()
 
     # Запускаем фоновые задачи без блокировки Flask
     threading.Thread(target=init_background_tasks, daemon=True).start()
