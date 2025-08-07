@@ -45,6 +45,7 @@ def self_ping():
             print(f"[PING] Error: {e}")
         time.sleep(300)  # каждые 5 минут
 
+
 # Получаем токены из переменных окружения для безопасности
 TOKEN = os.getenv("BOT_TOKEN")
 OWM_API_KEY = os.getenv("OPENWEATHER_API_KEY")
@@ -164,7 +165,9 @@ LANGUAGES = {
         'alert_cold': "{icon} Очень холодно! Температура: {temp}°C",
         'alert_wind': "{icon} Сильный ветер: {wind} м/с",
         'alert_visibility': "👁️ Плохая видимость: {visibility} км",
-        'weather_chart': "График температуры"
+        'weather_chart': "График температуры",
+        'share_button': "🌟 Рекомендовать бота", 
+        'share_message': "Попробуйте этого бота для погоды — он присылает точные прогнозы и уведомления: 👇",  
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -233,7 +236,9 @@ LANGUAGES = {
         'alert_cold': "{icon} Very cold! Temperature: {temp}°C",
         'alert_wind': "{icon} Strong wind: {wind} m/s",
         'alert_visibility': "👁️ Low visibility: {visibility} km",
-        'weather_chart': "Temperature chart"
+        'weather_chart': "Temperature chart",
+        'share_button': "🌟 Share Bot",  
+        'share_message': "Try this weather bot — it sends accurate forecasts and alerts: 👇",  
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
@@ -302,7 +307,10 @@ LANGUAGES = {
         'alert_cold': "{icon} Дуже холодно! Температура: {temp}°C",
         'alert_wind': "{icon} Сильний вітер: {wind} м/с",
         'alert_visibility': "👁️ Погана видимість: {visibility} км",
-        'weather_chart': "Графік температури"
+        'weather_chart': "Графік температури",
+        'share_button': "🌟 Порекомендувати бота",  
+        'share_message': "Спробуйте цього бота для погоди — він надсилає точні прогнози та сповіщення: 👇",  
+    
     }
 }
 import logging
@@ -502,7 +510,8 @@ def get_weather_icon(description: str) -> str:
 def create_main_keyboard(lang: str) -> types.ReplyKeyboardMarkup:
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add(
-        types.KeyboardButton(LANGUAGES[lang]['send_location'], request_location=True)
+        types.KeyboardButton(LANGUAGES[lang]['send_location'], request_location=True),
+        types.KeyboardButton(LANGUAGES[lang]['share_button'])
     )
     kb.add(
         types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
@@ -512,6 +521,7 @@ def create_main_keyboard(lang: str) -> types.ReplyKeyboardMarkup:
         types.KeyboardButton(LANGUAGES[lang]['chart_button']),
         types.KeyboardButton(LANGUAGES[lang]['settings_button'])
     )
+    
     return kb
 
 def safe_send_message(chat_id: int, text: str, **kwargs):
@@ -640,6 +650,25 @@ def handle_location(msg):
         logger.error(f"Error in handle_location: {e}")
         settings = data_manager.get_user_settings(msg.chat.id)
         safe_send_message(msg.chat.id, LANGUAGES[settings['language']]['error'].format(error="Ошибка обработки геолокации"))
+
+@bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['share_button'] for lang in LANGUAGES.keys()))
+def handle_share_button(msg):
+    try:
+        bot_username = bot.get_me().username
+        share_text = LANGUAGES[data_manager.get_user_settings(msg.chat.id)['language']]['share_message']
+        
+        bot.send_message(
+            msg.chat.id,
+            share_text.format(bot_username=bot_username),
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton(
+                    text="📤 Отправить",
+                    url=f"tg://msg_url?text={share_text.format(bot_username=bot_username)}"
+                )
+            )
+        )
+    except Exception as e:
+        logger.error(f"Share error: {e}")
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['cities_button'] for lang in LANGUAGES.keys()))
 def show_saved_cities(msg):
