@@ -654,21 +654,39 @@ def handle_location(msg):
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['share_button'] for lang in LANGUAGES.keys()))
 def handle_share_button(msg):
     try:
+        # Получаем данные
         bot_username = bot.get_me().username
-        share_text = LANGUAGES[data_manager.get_user_settings(msg.chat.id)['language']]['share_message']
+        lang = data_manager.get_user_settings(msg.chat.id)['language']
+        share_template = LANGUAGES[lang]['share_message']
         
-        bot.send_message(
-            msg.chat.id,
-            share_text.format(bot_username=bot_username),
-            reply_markup=types.InlineKeyboardMarkup().add(
-                types.InlineKeyboardButton(
-                    text="📤 Отправить",
-                    url=f"tg://msg_url?text={share_text.format(bot_username=bot_username)}"
-                )
+        # Формируем текст (убедимся, что username без @)
+        clean_username = bot_username.lstrip('@')
+        final_text = share_template.format(bot_username=clean_username)
+        
+        # Кодируем текст для URL
+        from urllib.parse import quote
+        encoded_text = quote(final_text)
+        
+        # Создаем кнопку с правильным URL
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton(
+                text=LANGUAGES[lang].get('share_button', '📤 Отправить'),
+                url=f"https://t.me/share/url?url=https://t.me/{clean_username}&text={encoded_text}"
             )
         )
+        
+        # Отправляем сообщение
+        bot.send_message(
+            msg.chat.id,
+            final_text,
+            reply_markup=markup,
+            disable_web_page_preview=True
+        )
+        
     except Exception as e:
         logger.error(f"Share error: {e}")
+        bot.send_message(msg.chat.id, "⚠️ Произошла ошибка при создании ссылки")
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['cities_button'] for lang in LANGUAGES.keys()))
 def show_saved_cities(msg):
