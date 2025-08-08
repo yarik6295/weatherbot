@@ -850,46 +850,97 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
-        # Сбрасываем только настройки уведомлений (сохраненные города остаются)
-        data_manager.update_user_setting(msg.chat.id, 'notification_city', None)
-        data_manager.update_user_setting(msg.chat.id, 'notification_time', '20:00')
-        data_manager.update_user_setting(msg.chat.id, 'notifications', True)
+        # 1. Устанавливаем базовые настройки (если их нет)
+        defaults = {
+            'notification_city': None,
+            'notification_time': '08:00',
+            'notifications': True,
+            'language': 'ru'  # Временный язык по умолчанию
+        }
         
-        settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+        current_settings = data_manager.get_user_settings(msg.chat.id)
+        for key, value in defaults.items():
+            if key not in current_settings:
+                data_manager.update_user_setting(msg.chat.id, key, value)
+
+        # 2. Отправляем приветственное сообщение на временном языке
+        lang = current_settings.get('language', 'ru')
         
-        # Создаем две клавиатуры:
-        # 1. Inline-кнопки для выбора языка
-        lang_markup = types.InlineKeyboardMarkup(row_width=3)
-        buttons = [types.InlineKeyboardButton(code.upper(), callback_data=f"lang_{code}") 
-                  for code in LANGUAGES]
-        lang_markup.add(*buttons)
-        
-        # 2. Reply-кнопку геолокации (появится под клавиатурой)
-        geo_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        geo_markup.add(types.KeyboardButton(
-            LANGUAGES[lang]['send_location'],
-            request_location=True
-        ))
-        
-        # Сначала отправляем сообщение с выбором языка
+        # 3. Добавляем кнопку выбора языка
+        lang_markup = types.InlineKeyboardMarkup()
+        lang_markup.add(
+            types.InlineKeyboardButton(
+                LANGUAGES[lang]['choose_language_button'],
+                callback_data="show_lang_menu"
+            )
+        )
+
         bot.send_message(
             msg.chat.id,
             LANGUAGES[lang]['welcome'],
             parse_mode="Markdown",
             reply_markup=lang_markup
         )
+
+    except Exception as e:
+        logger.error(f"Start error: {e}")
+        bot.send_message(msg.chat.id, "⚠️ Ошибка при запуске")
+
+# Показываем меню выбора языка
+@bot.callback_query_handler(func=lambda call: call.data == "show_lang_menu")
+def show_language_menu(call):
+    try:
+        lang_markup = types.InlineKeyboardMarkup()
+        for code in LANGUAGES.keys():
+            lang_markup.add(
+                types.InlineKeyboardButton(
+                    LANGUAGES[code]['language_name'],
+                    callback_data=f"set_init_lang_{code}"
+                )
+            )
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=LANGUAGES[data_manager.get_user_settings(call.message.chat.id)['language']]['choose_language'],
+            reply_markup=lang_markup
+        )
+    except Exception as e:
+        logger.error(f"Language menu error: {e}")
+
+# Обработчик выбора языка
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_init_lang_'))
+def set_initial_language(call):
+    try:
+        lang = call.data.split('_')[3]
+        data_manager.update_user_setting(call.message.chat.id, 'language', lang)
         
-        # Затем запрашиваем город с кнопкой геолокации
+        # Создаем клавиатуру для запроса локации
+        geo_markup = types.ReplyKeyboardMarkup(
+            resize_keyboard=True, 
+            one_time_keyboard=True
+        )
+        geo_markup.add(
+            types.KeyboardButton(
+                LANGUAGES[lang]['send_location'],
+                request_location=True
+            )
+        )
+
+        # Удаляем предыдущее сообщение
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        
+        # Отправляем запрос локации
         bot.send_message(
-            msg.chat.id,
+            call.message.chat.id,
             LANGUAGES[lang]['ask_location'],
             reply_markup=geo_markup
         )
         
+        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
+        
     except Exception as e:
-        logger.error(f"Error in cmd_start: {e}")
-        bot.send_message(msg.chat.id, "⚠️ Произошла ошибка при запуске")
+        logger.error(f"Set language error: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
 def set_language(call):
