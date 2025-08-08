@@ -2170,23 +2170,13 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}/"
 
 app = Flask(__name__)
 
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Добавьте в переменные окружения
-if not os.getenv("WEBHOOK_SECRET"):
-    logger.error("❌ WEBHOOK_SECRET not set! Generate it first.")
-    exit(1)
 
 @app.route("/", methods=["POST"])
 def webhook():
-    if WEBHOOK_SECRET and request.headers.get('X-Telegram-Bot-Api-Secret-Token') != WEBHOOK_SECRET:
-        return "Forbidden", 403
-        
-    try:
+    if request.method == "POST":
         update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
         bot.process_new_updates([update])
-        return "ok", 200
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return "error", 500
+    return "ok", 200
 
 @app.route("/", methods=["GET"])
 def healthcheck():
