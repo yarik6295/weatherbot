@@ -237,7 +237,9 @@ LANGUAGES = {
         'no_cities_text': "📍 Нет сохранённых городов",
         'request_location': "📍 Отправить геолокацию",
         'or_text': "или",
-        'enter_city_manual': "введите название города вручную"
+        'enter_city_manual': "введите название города вручную",
+        'language_name': 'Русский',
+        'choose_language': "Выберите язык:",
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -368,7 +370,9 @@ LANGUAGES = {
         'no_cities_text': "📍 No saved cities",
         'request_location': "📍 Send location",
         'or_text': "or",
-        'enter_city_manual': "enter city name manually"
+        'enter_city_manual': "enter city name manually",
+        'language_name': 'English',
+        'choose_language': "Select language:",
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
@@ -499,7 +503,9 @@ LANGUAGES = {
         'no_cities_text': "📍 Немає збережених міст",
         'request_location': "📍 Надіслати геолокацію",
         'or_text': "або",
-        'enter_city_manual': "введіть назву міста вручну"
+        'enter_city_manual': "введіть назву міста вручну",
+        'language_name': 'Українська',
+        'choose_language': "Оберіть мову:",
     
     }
 }
@@ -885,23 +891,57 @@ def cmd_start(msg):
 @bot.callback_query_handler(func=lambda call: call.data == "show_lang_menu")
 def show_language_menu(call):
     try:
+        # Получаем текущие настройки с защитой от ошибок
+        try:
+            user_settings = data_manager.get_user_settings(call.message.chat.id)
+            current_lang = user_settings.get('language', 'ru')
+        except:
+            current_lang = 'ru'
+        
+        # Создаем кнопки выбора языка с защитными проверками
         lang_markup = types.InlineKeyboardMarkup(row_width=2)
         for code in LANGUAGES.keys():
+            # Безопасное получение названия языка
+            lang_name = LANGUAGES.get(code, {}).get('language_name', code.upper())
+            
             lang_markup.add(
                 types.InlineKeyboardButton(
-                    LANGUAGES[code]['language_name'],
+                    text=lang_name,
                     callback_data=f"set_init_lang_{code}"
                 )
             )
 
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            text="Выберите язык / Select language:",
-            reply_markup=lang_markup
+        # Безопасное получение текста для сообщения
+        menu_text = LANGUAGES.get(current_lang, {}).get(
+            'choose_language', 
+            "Выберите язык / Choose language:"
         )
+
+        # Редактируем сообщение с обработкой ошибок
+        try:
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=menu_text,
+                reply_markup=lang_markup
+            )
+        except Exception as edit_error:
+            # Если не получилось отредактировать, отправляем новое
+            bot.send_message(
+                call.message.chat.id,
+                menu_text,
+                reply_markup=lang_markup
+            )
+            
+        # Всегда подтверждаем нажатие кнопки
+        bot.answer_callback_query(call.id)
+
     except Exception as e:
-        logger.error(f"Language menu error: {e}")
+        logger.error(f"Language menu error: {str(e)}")
+        try:
+            bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки меню")
+        except:
+            pass
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('set_init_lang_'))
 def set_initial_language(call):
