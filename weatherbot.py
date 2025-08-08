@@ -81,6 +81,8 @@ except Exception as e:
     logger.warning(f"SSL context creation failed: {e}")
     geolocator = Nominatim(user_agent="enhanced_weatherbot/1.0", timeout=15)
 
+
+
 WEATHER_ICONS = {
     'clear sky': '☀️',
     'few clouds': '🌤️',
@@ -483,17 +485,38 @@ import logging
 class DataManager:
     def __init__(self, MONGO_CONNECTION_STRING: str, db_name: str, collection_name: str):
         try:
+            # Очищаем URI от лишних символов
+            MONGO_CONNECTION_STRING = MONGO_CONNECTION_STRING.strip()
+            
+            # Проверяем, что URI начинается с mongodb
+            if not MONGO_CONNECTION_STRING.startswith("mongodb"):
+                raise ValueError("Invalid MongoDB URI format")
+            
+            # Добавляем обязательные параметры, если их нет
             if "retryWrites=true" not in MONGO_CONNECTION_STRING.lower():
-                MONGO_CONNECTION_STRING += "?retryWrites=true&w=majority"  # Автодобавление, если отсутствует
-            self.client = MongoClient(MONGO_CONNECTION_STRING, serverSelectionTimeoutMS=5000)  # Таймаут 5 сек
-            self.client.server_info()  # Проверка подключения
+                if "?" in MONGO_CONNECTION_STRING:
+                    MONGO_CONNECTION_STRING += "&retryWrites=true&w=majority"
+                else:
+                    MONGO_CONNECTION_STRING += "?retryWrites=true&w=majority"
+            
+            logger.info(f"Connecting to MongoDB with URI: {MONGO_CONNECTION_STRING.split('@')[0]}...")
+            
+            self.client = MongoClient(
+                MONGO_CONNECTION_STRING,
+                serverSelectionTimeoutMS=5000,
+                tls=True,  # Используем tls вместо ssl
+                tlsAllowInvalidCertificates=False
+            )
+            
+            # Проверка подключения
+            self.client.admin.command('ping')
             self.db = self.client[db_name]
             self.collection = self.db[collection_name]
-            self.collection.create_index("chat_id", unique=True)
+            logger.info("✅ MongoDB подключение успешно!")
+            
         except Exception as e:
-            logger.error(f"❌ MongoDB connection failed: {e}")
-            exit(1)
-
+            logger.error(f"❌ FATAL ERROR: MongoDB connection failed - {str(e)}")
+            raise SystemExit(1)
     def connect(self, MONGO_CONNECTION_STRING: str, db_name: str, collection_name: str):
         try:
             if "retryWrites=true" not in MONGO_CONNECTION_STRING.lower():
