@@ -229,7 +229,15 @@ LANGUAGES = {
             'Asia/Shanghai': 'Шанхай',
             'Asia/Tokyo': 'Токио',
             'Australia/Sydney': 'Сидней'
-        }
+        },
+        'saved_cities_title': "🏙️ Сохранённые города",
+        'saved_cities_count': "🗂 Сохранено городов: {}",
+        'remove_city_btn': "❌ Удалить",
+        'forecast_city_btn': "🌤️ Прогноз",
+        'no_cities_text': "📍 Нет сохранённых городов",
+        'request_location': "📍 Отправить геолокацию",
+        'or_text': "или",
+        'enter_city_manual': "введите название города вручную"
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -352,7 +360,15 @@ LANGUAGES = {
             'Asia/Shanghai': 'Shanghai',
             'Asia/Tokyo': 'Tokyo',
             'Australia/Sydney': 'Sydney'
-        }
+        },
+        'saved_cities_title': "🏙️ Saved Cities",
+        'saved_cities_count': "🗂 Cities saved: {}",
+        'remove_city_btn': "❌ Delete",
+        'forecast_city_btn': "🌤️ Forecast", 
+        'no_cities_text': "📍 No saved cities",
+        'request_location': "📍 Send location",
+        'or_text': "or",
+        'enter_city_manual': "enter city name manually"
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
@@ -475,7 +491,15 @@ LANGUAGES = {
             'Asia/Shanghai': 'Шанхай',
             'Asia/Tokyo': 'Токіо',
             'Australia/Sydney': 'Сідней'
-        }
+        },
+        'saved_cities_title': "🏙️ Збережені міста",
+        'saved_cities_count': "🗂 Збережено міст: {}",
+        'remove_city_btn': "❌ Видалити",
+        'forecast_city_btn': "🌤️ Прогноз",
+        'no_cities_text': "📍 Немає збережених міст",
+        'request_location': "📍 Надіслати геолокацію",
+        'or_text': "або",
+        'enter_city_manual': "введіть назву міста вручну"
     
     }
 }
@@ -826,28 +850,46 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
-        # При /start НЕ очищаем saved_cities, чтобы избранные города не терялись
-        # Сбрасываем только настройки уведомлений, но не saved_cities
+        # Сбрасываем только настройки уведомлений (сохраненные города остаются)
         data_manager.update_user_setting(msg.chat.id, 'notification_city', None)
         data_manager.update_user_setting(msg.chat.id, 'notification_time', '20:00')
         data_manager.update_user_setting(msg.chat.id, 'notifications', True)
+        
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        buttons = []
-        for code, lang_data in LANGUAGES.items():
-            buttons.append(types.InlineKeyboardButton(
-                code.upper(), callback_data=f"lang_{code}"
-            ))
-        markup.add(*buttons)
-        safe_send_message(
-            msg.chat.id, 
-            LANGUAGES[lang]['welcome'], 
-            parse_mode="Markdown", 
-            reply_markup=markup
+        
+        # Создаем две клавиатуры:
+        # 1. Inline-кнопки для выбора языка
+        lang_markup = types.InlineKeyboardMarkup(row_width=3)
+        buttons = [types.InlineKeyboardButton(code.upper(), callback_data=f"lang_{code}") 
+                  for code in LANGUAGES]
+        lang_markup.add(*buttons)
+        
+        # 2. Reply-кнопку геолокации (появится под клавиатурой)
+        geo_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        geo_markup.add(types.KeyboardButton(
+            LANGUAGES[lang]['send_location'],
+            request_location=True
+        ))
+        
+        # Сначала отправляем сообщение с выбором языка
+        bot.send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['welcome'],
+            parse_mode="Markdown",
+            reply_markup=lang_markup
         )
+        
+        # Затем запрашиваем город с кнопкой геолокации
+        bot.send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['ask_location'],
+            reply_markup=geo_markup
+        )
+        
     except Exception as e:
         logger.error(f"Error in cmd_start: {e}")
+        bot.send_message(msg.chat.id, "⚠️ Произошла ошибка при запуске")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
 def set_language(call):
@@ -948,53 +990,31 @@ def set_notification_city(call):
 @bot.message_handler(content_types=['location'])
 def handle_location(msg):
     try:
-        settings = data_manager.get_user_settings(msg.chat.id)  # Получаем настройки
-        lang = settings['language']  # Извлекаем язык
-        
         if not msg.location:
             return
             
-        loc = msg.location
-        weather_data = weather_api.get_current_weather_by_coords(loc.latitude, loc.longitude, lang)
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings['language']
         
-        if not weather_data or 'name' not in weather_data:
+        # Получаем город по координатам
+        location = geolocator.reverse((msg.location.latitude, msg.location.longitude), exactly_one=True)
+        if not location:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
             return
             
-        # Добавьте проверку ключей:
-        city = weather_data.get('name', 'Unknown')
-        timezone = tf.timezone_at(lat=loc.latitude, lng=loc.longitude) or 'UTC'
+        address = location.raw.get('address', {})
+        city = address.get('city') or address.get('town') or address.get('village')
         
-        city = weather_data['name']
-        
-        # Нормализуем название города
-        normalized_city = weather_api.normalize_city_name(city)
-        
-        # Получить timezone
-        try:
-            tz = tf.timezone_at(lat=loc.latitude, lng=loc.longitude)
-            if tz:
-                data_manager.update_user_setting(msg.chat.id, 'timezone', tz)
-        except Exception as e:
-            logger.warning(f"Error getting timezone: {e}")
-        
-        # Добавить город в сохраненные если его там нет
-        saved_cities = settings.get('saved_cities', [])
-        if normalized_city not in saved_cities:
-            if len(saved_cities) < 5:
-                saved_cities.append(normalized_city)
-                data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['city_added'].format(city=normalized_city))
-            else:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
-        
-        send_current_weather(msg.chat.id, normalized_city, lang, loc.latitude, loc.longitude)
+        if not city:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+            return
+            
+        # Далее обрабатываем город как обычно
+        process_new_city(msg, city=city)
         
     except Exception as e:
         logger.error(f"Error in handle_location: {e}")
-        settings = data_manager.get_user_settings(msg.chat.id)
-        safe_send_message(msg.chat.id, LANGUAGES[settings['language']]['error'].format(error="Ошибка обработки геолокации"))
-
+        
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['share_button'] for lang in LANGUAGES.keys()))
 def handle_share_button(msg):
     try:
@@ -1320,68 +1340,232 @@ def request_new_city(call):
         
         if len(settings.get('saved_cities', [])) >= 5:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['max_cities'])
-        else:
-            msg = bot.send_message(call.message.chat.id, "📍 Введите название города:")
-            bot.register_next_step_handler(msg, process_new_city)
+            return
+            
+        # Создаем клавиатуру с кнопкой геолокации
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(
+            types.KeyboardButton(
+                LANGUAGES[lang]['request_location'],
+                request_location=True
+            )
+        )
         
-        bot.answer_callback_query(call.id)
+        msg = bot.send_message(
+            call.message.chat.id,
+            f"{LANGUAGES[lang]['enter_city']}\n\n"
+            f"{LANGUAGES[lang]['or_text']} {LANGUAGES[lang]['enter_city_manual']}",
+            reply_markup=markup
+        )
+        bot.register_next_step_handler(msg, process_new_city)
+        
     except Exception as e:
         logger.error(f"Error in request_new_city: {e}")
 
-def process_new_city(msg):
+def process_new_city(msg, city=None):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        city = msg.text.strip()
-        
-        # Проверяем погоду для города
-        weather_data = weather_api.get_current_weather(city, lang)
-        if not weather_data:
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-            return
-        
-        # Нормализуем название города
-        normalized_city = weather_api.normalize_city_name(weather_data['name'])
-        
-        # Добавляем в сохраненные
         saved_cities = settings.get('saved_cities', [])
-        if normalized_city not in saved_cities:
-            saved_cities.append(normalized_city)
-            data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-            # Если пользователь не выбирал город для уведомлений вручную, делаем этот город городом для уведомлений
-            if not settings.get('notification_city'):
-                data_manager.update_user_setting(msg.chat.id, 'notification_city', normalized_city)
-                safe_send_message(msg.chat.id, f"✅ {normalized_city} теперь выбран для ежедневных уведомлений о прогнозе.")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['city_added'].format(city=normalized_city))
-            send_current_weather(msg.chat.id, normalized_city, lang)
-        else:
-            safe_send_message(msg.chat.id, f"⚠️ Город {normalized_city} уже добавлен")
+        
+        # Получаем название города
+        if city:  # Если город передан из геолокации
+            city_name = city
+        else:     # Если город введен вручную
+            if not msg.text or len(msg.text.strip()) > 100:
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                return
             
+            city_name = msg.text.strip()
+            # Проверяем погоду для города (валидация)
+            weather_data = weather_api.get_current_weather(city_name, lang)
+            if not weather_data:
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                return
+            
+            # Нормализуем название города из API
+            city_name = weather_api.normalize_city_name(weather_data['name'])
+
+        # Проверяем лимит городов (макс. 5)
+        if len(saved_cities) >= 5:
+            safe_send_message(
+                msg.chat.id,
+                LANGUAGES[lang]['max_cities'],
+                reply_markup=create_main_keyboard(msg.chat.id)
+            )
+            return
+
+        # Добавляем город если его нет в списке
+        if city_name not in saved_cities:
+            saved_cities.append(city_name)
+            data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
+            
+            # Если это первый город - делаем его городом для уведомлений
+            if len(saved_cities) == 1:
+                data_manager.update_user_setting(msg.chat.id, 'notification_city', city_name)
+            
+            # Отправляем подтверждение и погоду
+            safe_send_message(
+                msg.chat.id,
+                LANGUAGES[lang]['city_added'].format(city=city_name),
+                reply_markup=types.ReplyKeyboardRemove()  # Скрываем клавиатуру
+            )
+            send_current_weather(msg.chat.id, city_name, lang)
+        else:
+            safe_send_message(
+                msg.chat.id,
+                f"⚠️ {city_name} уже есть в вашем списке",
+                reply_markup=create_main_keyboard(msg.chat.id)
+            )
+
     except Exception as e:
         logger.error(f"Error in process_new_city: {e}")
+        safe_send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['error'].format(error="Ошибка добавления города"),
+            reply_markup=create_main_keyboard(msg.chat.id)
+        )
 
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+
+        markup = types.InlineKeyboardMarkup(row_width=2)
         
-        markup = types.InlineKeyboardMarkup()
-        markup.row(
+        # Основные кнопки настроек
+        buttons = [
             types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], callback_data="notifications_settings"),
-            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings")
-        )
-        markup.row(
+            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings"),
             types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings")
-        )
+        ]
         
-        safe_send_message(
+        # Кнопка городов (если они есть)
+        if saved_cities:
+            buttons.append(
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['saved_cities_title'],
+                    callback_data="show_saved_cities_settings"
+                )
+            )
+
+        # Распределяем кнопки по 2 в ряд
+        for i in range(0, len(buttons), 2):
+            markup.add(*buttons[i:i+2])
+
+        # Кнопка "Назад"
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_menu"))
+
+        bot.send_message(
             msg.chat.id,
-            LANGUAGES[lang]['settings_title'],
+            LANGUAGES[lang]['settings_menu'].format(
+                notifications="вкл" if settings.get('notifications') else "выкл",
+                time=settings.get('notification_time', '--:--'),
+                lang=lang.upper(),
+                cities=len(saved_cities),
+                timezone=settings.get('timezone', 'UTC')
+            ),
+            parse_mode="Markdown",
             reply_markup=markup
         )
+
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
+        bot.send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
+
+@bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
+def show_saved_cities_settings(call):
+    try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+
+        markup = types.InlineKeyboardMarkup()
+
+        if not saved_cities:
+            markup.add(types.InlineKeyboardButton(
+                LANGUAGES[lang]['back_button'],
+                callback_data="back_to_settings"
+            ))
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=LANGUAGES[lang]['no_cities_text'],
+                reply_markup=markup
+            )
+            return
+
+        for city in saved_cities:
+            markup.row(
+                types.InlineKeyboardButton(
+                    f"{city}",
+                    callback_data=f"weather_{city}"
+                ),
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['remove_city_btn'],
+                    callback_data=f"remove_city_{city}"
+                ),
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['forecast_city_btn'],
+                    callback_data=f"forecast_{city}"
+                )
+            )
+
+        markup.add(types.InlineKeyboardButton(
+            LANGUAGES[lang]['back_button'],
+            callback_data="back_to_settings"
+        ))
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=LANGUAGES[lang]['saved_cities_title'] + f"\n\n{LANGUAGES[lang]['saved_cities_count'].format(len(saved_cities))}",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+
+    except Exception as e:
+        logger.error(f"Error in show_saved_cities_settings: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки списка городов")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("remove_city_"))
+def remove_city_handler(call):
+    try:
+        city = call.data.split('_', 2)[2]  # Извлекаем название города
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+
+        if city in saved_cities:
+            # Удаляем город
+            saved_cities.remove(city)
+            data_manager.update_user_setting(call.message.chat.id, 'saved_cities', saved_cities)
+            
+            # Обновляем сообщение
+            if saved_cities:
+                show_saved_cities_settings(call)
+            else:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=LANGUAGES[lang]['no_cities_text'],
+                    reply_markup=types.InlineKeyboardMarkup().add(
+                        types.InlineKeyboardButton(
+                            LANGUAGES[lang]['back_button'],
+                            callback_data="back_to_settings"
+                        )
+                    )
+                )
+            
+            bot.answer_callback_query(call.id, f"🗑️ {city} удалён")
+        else:
+            bot.answer_callback_query(call.id, "⚠️ Город не найден")
+
+    except Exception as e:
+        logger.error(f"Error in remove_city_handler: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка удаления")
 
 @bot.callback_query_handler(func=lambda call: call.data == "language_settings")
 def show_languages(call):
