@@ -110,7 +110,12 @@ ALERT_ICONS = {
 LANGUAGES = {
     'ru': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-        'welcome': "👋 *Приветствуем в MeteoBox📦🌦️!*\n\n✨ Что я умею:\n⛈️ 🌤️ Прогноз погоды на 5 дней\n📊 🌡️ Графики температуры на 5 дней\n🏙️ 📍 Погода в любом городе \n🚨 🌪️ Погодные предупреждения\n🔔 💬 Авто-уведомления о погоде на завтра\n\nВыберите язык:",
+        'welcome': "👋 *Приветствуем в MeteoBox📦🌦️!*\n"
+            "📌 Как пользоваться:\n"
+            "1️⃣ Отправьте 📍 геолокацию или введите название города\n"
+            "2️⃣ Используйте кнопки для просмотра прогноза и графиков\n"
+            "3️⃣ Настройте уведомления в разделе ⚙️ Настройки\n\n"
+            "📍 Для начала отправьте ваш город или местоположение:",
         'ask_location': "📍 Отправьте геолокацию или введите название города:",
         'forecast_button': "🌦️ Прогноз",
         'cities_button': "🏙️ Мои города",
@@ -243,7 +248,12 @@ LANGUAGES = {
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        'welcome': "👋 *Welcome to MeteoBox📦🌦️!*\n\n✨ What I can do:\n⛈️ 🌤️ 5-day weather forecast\n📊 🌡️ 5-day temperature charts\n🏙️ 📍 Weather in any city\n🚨 🌪️ Weather warnings\n🔔 💬 Auto-notifications about tomorrow's weather\n\nSelect language:",
+        'welcome': "👋 *Welcome to MeteoBox📦🌦️!*\n"
+            "📌 How to use:\n"
+            "1️⃣ Send 📍 your location or enter a city name\n"
+            "2️⃣ Use buttons for quick access to forecast and charts\n"
+            "3️⃣ Set up notifications in ⚙️ Settings\n\n"
+            "📍 To start, send your city or location:",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
         'cities_button': "🏙️ My Cities",
@@ -376,7 +386,12 @@ LANGUAGES = {
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
-        'welcome': "👋 *Вітаємо в MeteoBox📦🌦️!*\n\n✨ Що я можу зробити:\n⛈️ 🌤️ 5-денний прогноз погоди\n📊 🌡️ 5-денні графіки температури\n🏙️ 📍 Погода в будь-якому місті\n🚨 🌪️ Погодні попередження\n🔔 💬 Автоматичні сповіщення про погоду на завтра\n\nОберіть мову:",
+        'welcome': "👋 *Ласкаво просимо до MeteoBox📦🌦️!*\n"
+            "📌 Як користуватись:\n"
+            "1️⃣ Надішліть 📍 геолокацію або введіть назву міста\n"
+            "2️⃣ Використовуйте кнопки для швидкого доступу до прогнозу та графіків\n"
+            "3️⃣ Налаштуйте сповіщення в ⚙️ Налаштуваннях\n\n"
+            "📍 Для початку надішліть своє місто або місцезнаходження:",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
         'cities_button': "🏙️ Мої міста",
@@ -1003,6 +1018,93 @@ def set_initial_language(call):
         
     except Exception as e:
         logger.error(f"Set language error: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_settings")
+def handle_back_to_settings(call):
+    try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.row(
+            types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], callback_data="notifications_settings"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings")
+        )
+        markup.row(
+            types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
+        )
+        markup.row(
+            types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_main")
+        )
+
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=LANGUAGES[lang]['settings_title'],
+            reply_markup=markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Back error: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
+def handle_back_to_main(call):
+    try:
+        lang = data_manager.get_user_settings(call.message.chat.id)['language']
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        
+        # Показываем главное меню
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.row(
+            types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
+            types.KeyboardButton(LANGUAGES[lang]['chart_button'])
+        )
+        markup.row(
+            types.KeyboardButton(LANGUAGES[lang]['settings_button']),
+            types.KeyboardButton(LANGUAGES[lang]['share_button'])
+        )
+        
+        bot.send_message(
+            call.message.chat.id,
+            "Выберите действие:",
+            reply_markup=markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Back to main error: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_lang_'))
+def set_language_handler(call):
+    try:
+        lang = call.data.split('_')[2]
+        data_manager.update_user_setting(call.message.chat.id, 'language', lang)
+        
+        # Удаляем сообщение с выбором языка
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        
+        # Показываем приветствие с инструкциями
+        geo_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        geo_markup.add(
+            types.KeyboardButton(
+                LANGUAGES[lang]['send_location'],
+                request_location=True
+            )
+        )
+        
+        bot.send_message(
+            call.message.chat.id,
+            LANGUAGES[lang]['welcome'],
+            parse_mode="Markdown",
+            reply_markup=geo_markup
+        )
+        
+        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
+        
+    except Exception as e:
+        logger.error(f"Language error: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")       
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
 def set_language(call):
