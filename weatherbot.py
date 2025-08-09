@@ -222,6 +222,14 @@ LANGUAGES = {
         'enter_city_manual': "введите название города вручную",
         'language_name': 'Русский',
         'choose_language': "Выберите язык:",
+        'feels_like': "(ощущается как {feels}°C)",
+        'humidity': "💧 Влажность: {humidity}%",
+        'pressure': "📊 Давление: {pressure} гПа",
+        'sun_info': "🌅 Восход: {sunrise} | 🌇 Закат: {sunset}",
+        'wind_info': "💨 Ветер: {speed} м/с {direction} (порывы до {gust} м/с)",
+        'now': "*Сейчас:*",
+        'in_city': "в {city}",
+        
     },
     'en': {
         'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -334,6 +342,13 @@ LANGUAGES = {
         'enter_city_manual': "enter city name manually",
         'language_name': 'English',
         'choose_language': "Select language:",
+        'feels_like': "(feels like {feels}°C)",
+        'humidity': "💧 Humidity: {humidity}%",
+        'pressure': "📊 Pressure: {pressure} hPa",
+        'sun_info': "🌅 Sunrise: {sunrise} | 🌇 Sunset: {sunset}",
+        'wind_info': "💨 Wind: {speed} m/s {direction} (gusts to {gust} m/s)",
+        'now': "*Now:*",
+        'in_city': "in {city}",
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
@@ -446,6 +461,13 @@ LANGUAGES = {
         'enter_city_manual': "введіть назву міста вручну",
         'language_name': 'Українська',
         'choose_language': "Оберіть мову:",
+        'feels_like': "(відчувається як {feels}°C)",
+        'humidity': "💧 Вологість: {humidity}%",
+        'pressure': "📊 Тиск: {pressure} гПа",
+        'sun_info': "🌅 Схід: {sunrise} | 🌇 Захід: {sunset}",
+        'wind_info': "💨 Вітер: {speed} м/с {direction} (пориви до {gust} м/с)",
+        'now': "*Зараз:*",
+        'in_city': "в {city}",
     
     }
 }
@@ -776,6 +798,13 @@ def check_rate_limit(chat_id):
     return True
 
 _cache_cleanup_counter = 0
+
+def send_main_menu(chat_id, lang):
+    safe_send_message(
+        chat_id,
+        LANGUAGES[lang]['main_menu'],
+        reply_markup=create_main_keyboard(chat_id)
+    )
 
 def get_cached_weather(city, lang, api_func):
     global _cache_cleanup_counter
@@ -1563,34 +1592,36 @@ def process_new_city(msg, city=None):
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
 
+        # --- Определяем название города ---
         if city:
             city_name = city
         else:
             if not msg.text or len(msg.text.strip()) > 100:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'],
-                                  reply_markup=create_main_keyboard(msg.chat.id))
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                send_main_menu(msg.chat.id, lang)  # <--- главное меню после ошибки
                 return
 
             city_name = msg.text.strip()
             weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
             if not weather_data:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'],
-                                  reply_markup=create_main_keyboard(msg.chat.id))
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                send_main_menu(msg.chat.id, lang)
                 return
             city_name = weather_api.normalize_city_name(weather_data['name'])
 
+        # --- Проверка лимита городов ---
         if len(saved_cities) >= 5:
             safe_send_message(
                 msg.chat.id,
-                LANGUAGES[lang]['max_cities'],
-                reply_markup=create_main_keyboard(msg.chat.id)
+                LANGUAGES[lang]['max_cities']
             )
+            send_main_menu(msg.chat.id, lang)
             return
 
+        # --- Добавление города ---
         if city_name not in saved_cities:
             saved_cities.append(city_name)
             data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-
             if len(saved_cities) == 1:
                 data_manager.update_user_setting(msg.chat.id, 'notification_city', city_name)
 
@@ -1600,6 +1631,7 @@ def process_new_city(msg, city=None):
                 reply_markup=types.ReplyKeyboardRemove()
             )
             send_current_weather(msg.chat.id, city_name, lang)
+            send_main_menu(msg.chat.id, lang)
         else:
             safe_send_message(
                 msg.chat.id,
@@ -1607,30 +1639,16 @@ def process_new_city(msg, city=None):
                 reply_markup=types.ReplyKeyboardRemove()
             )
             send_current_weather(msg.chat.id, city_name, lang)
-
-        # <--- ВАЖНО! Вот здесь всегда показываем главное меню
-        safe_send_message(
-            msg.chat.id,
-            LANGUAGES[lang]['main_menu'],
-            reply_markup=create_main_keyboard(msg.chat.id)
-        )
+            send_main_menu(msg.chat.id, lang)
 
     except Exception as e:
         logger.error(f"Error in process_new_city: {e}")
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['error'].format(error="Ошибка добавления города"),
-            reply_markup=create_main_keyboard(msg.chat.id)
+            LANGUAGES[lang]['error'].format(error="Ошибка добавления города")
         )
-            
+        send_main_menu(msg.chat.id, lang)
 
-    except Exception as e:
-        logger.error(f"Error in process_new_city: {e}")
-        safe_send_message(
-            msg.chat.id,
-            LANGUAGES[lang]['error'].format(error="Ошибка добавления города"),
-            reply_markup=create_main_keyboard(msg.chat.id)
-        )
 
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
@@ -1871,6 +1889,8 @@ def handle_text_message(msg):
             else:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
         send_current_weather(msg.chat.id, city_name, lang)
+        send_main_menu(msg.chat.id, lang)
+        
             
     except Exception as e:
         logger.error(f"Error in handle_text_message: {e}")
@@ -1901,12 +1921,12 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
                 uv_info = "\n" + LANGUAGES[lang]['uv_index'].format(uv=uv, risk=risk)
         
         message = (
-            f"{icon} *Погода в {city}*\n"
-            f"🌡️ {temp}°C (ощущается {feels_like}°C)\n"
+            f"{icon} {LANGUAGES[lang]['in_city'].format(city=city)}\n"
+            f"🌡️ {temp}°C {LANGUAGES[lang]['feels_like'].format(feels=feels_like)}\n"
             f"{description}\n\n"
             f"{LANGUAGES[lang]['wind_info'].format(speed=wind_speed, direction=wind_dir, gust=wind_gust)}\n"
-            f"💧 Влажность: {current_data['main']['humidity']}%\n"
-            f"📊 Давление: {current_data['main']['pressure']} гПа\n"
+            f"{LANGUAGES[lang]['humidity'].format(humidity=current_data['main']['humidity'])}\n"
+            f"{LANGUAGES[lang]['pressure'].format(pressure=current_data['main']['pressure'])}\n"
             f"{LANGUAGES[lang]['sun_info'].format(sunrise=sunrise, sunset=sunset)}"
             f"{uv_info}"
         )
