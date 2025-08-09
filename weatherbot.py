@@ -202,8 +202,7 @@ LANGUAGES = {
         'enable_notifications': "🔔 Включить уведомления",
         'disable_notifications': "🔕 Выключить уведомления",
         'set_notification_city': "🏙 Выбрать город для уведомлений",
-        'set_notification_time': "⏰ Установить время уведомлений",
-        'location_button': "📍 Мои локации", 
+        'set_notification_time': "⏰ Установить время уведомлений", 
         'wind_directions': ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'],
         'uv_risk': {
             'low': 'низкий',
@@ -323,7 +322,6 @@ LANGUAGES = {
         'disable_notifications': "🔕 Disable notifications",
         'set_notification_city': "🏙 Set notification city",
         'set_notification_time': "⏰ Set notification time",
-        'location_button': "📍 My locations",
         'wind_directions': ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'],
         'uv_risk': {
             'low': 'low',
@@ -442,7 +440,6 @@ LANGUAGES = {
         'disable_notifications': "🔕 Вимкнути сповіщення",
         'set_notification_city': "🏙 Обрати місто для сповіщень",
         'set_notification_time': "⏰ Встановити час сповіщень",
-        'location_button': "📍 Мої локації",
         'wind_directions': ['Пн', 'ПнСх', 'Сх', 'ПдСх', 'Пд', 'ПдЗх', 'Зх', 'ПнЗх'],
         'uv_risk': {
             'low': 'низький',
@@ -869,9 +866,6 @@ def create_main_keyboard(chat_id):
         types.KeyboardButton(LANGUAGES[lang]['share_button']),
         types.KeyboardButton(LANGUAGES[lang]['settings_button'])
     )
-    
-    if data_manager.get_user_settings(chat_id).get('saved_cities'):
-        kb.row(types.KeyboardButton(LANGUAGES[lang]['location_button']))
         
     return kb
 
@@ -1383,39 +1377,14 @@ def show_forecast_options(msg):
         reply_markup=markup
     )
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
-def handle_forecast_city(call):
-    try:
-        city = call.data.split("_", 1)[1]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        today = datetime.now()
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        weekdays = LANGUAGES[lang]['weekdays']
-        for i in range(5):
-            date = today + timedelta(days=i)
-            date_str = date.strftime('%Y-%m-%d')
-            weekday_idx = date.weekday() % 7
-            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
-            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_forecast'], reply_markup=markup)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in handle_forecast_city: {e}")
-    except Exception as e:
-        logger.error(f"Error in show_forecast_options: {e}")     
-
-# --- После handle_forecast_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
 def handle_forecast_date(call):
-    try:
-        _, city, date_str = call.data.split("_", 2)
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        send_forecast_for_date(call.message.chat.id, city, lang, date_str)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in handle_forecast_date: {e}")
+    _, city, date_str = call.data.split("_", 2)
+    settings = data_manager.get_user_settings(call.message.chat.id)
+    lang = settings['language']
+    city = weather_api.normalize_city_name(city)
+    send_forecast_for_date(call.message.chat.id, city, lang, date_str)
+    bot.answer_callback_query(call.id)
 
 # --- После handle_chart_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chartdate_"))
@@ -1594,7 +1563,7 @@ def process_new_city(msg, city=None):
 
         # --- Определяем название города ---
         if city:
-            city_name = city
+            city_name = weather_api.normalize_city_name(city)
         else:
             if not msg.text or len(msg.text.strip()) > 100:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
