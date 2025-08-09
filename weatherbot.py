@@ -1562,26 +1562,23 @@ def process_new_city(msg, city=None):
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
-        
-        # Получаем название города
-        if city:  # Если город передан из геолокации
+
+        if city:
             city_name = city
-        else:     # Если город введен вручную
+        else:
             if not msg.text or len(msg.text.strip()) > 100:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'],
+                                  reply_markup=create_main_keyboard(msg.chat.id))
                 return
-            
+
             city_name = msg.text.strip()
-            # Проверяем погоду для города (валидация)
             weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
             if not weather_data:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'],
+                                  reply_markup=create_main_keyboard(msg.chat.id))
                 return
-            
-            # Нормализуем название города из API
             city_name = weather_api.normalize_city_name(weather_data['name'])
 
-        # Проверяем лимит городов (макс. 5)
         if len(saved_cities) >= 5:
             safe_send_message(
                 msg.chat.id,
@@ -1590,34 +1587,42 @@ def process_new_city(msg, city=None):
             )
             return
 
-        # Добавляем город если его нет в списке
         if city_name not in saved_cities:
             saved_cities.append(city_name)
             data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-            
-            # Если это первый город - делаем его городом для уведомлений
+
             if len(saved_cities) == 1:
                 data_manager.update_user_setting(msg.chat.id, 'notification_city', city_name)
-            
-            # Отправляем подтверждение и погоду
+
             safe_send_message(
                 msg.chat.id,
                 LANGUAGES[lang]['city_added'].format(city=city_name),
-                reply_markup=types.ReplyKeyboardRemove()  # Скрываем клавиатуру геолокации
+                reply_markup=types.ReplyKeyboardRemove()
             )
             send_current_weather(msg.chat.id, city_name, lang)
-            # Показываем главное меню
-            safe_send_message(
-                msg.chat.id,
-                LANGUAGES[lang]['main_menu'],
-                reply_markup=create_main_keyboard(msg.chat.id)
-            )
         else:
             safe_send_message(
                 msg.chat.id,
                 f"⚠️ {city_name} уже есть в вашем списке",
-                reply_markup=create_main_keyboard(msg.chat.id)
+                reply_markup=types.ReplyKeyboardRemove()
             )
+            send_current_weather(msg.chat.id, city_name, lang)
+
+        # <--- ВАЖНО! Вот здесь всегда показываем главное меню
+        safe_send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['main_menu'],
+            reply_markup=create_main_keyboard(msg.chat.id)
+        )
+
+    except Exception as e:
+        logger.error(f"Error in process_new_city: {e}")
+        safe_send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['error'].format(error="Ошибка добавления города"),
+            reply_markup=create_main_keyboard(msg.chat.id)
+        )
+            
 
     except Exception as e:
         logger.error(f"Error in process_new_city: {e}")
