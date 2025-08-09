@@ -19,6 +19,9 @@ import io
 from typing import Dict, List, Optional
 import urllib3
 from datetime import timezone
+import gc
+from threading import Lock
+from collections import defaultdict
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -209,32 +212,6 @@ LANGUAGES = {
             'very_high': 'очень высокий',
             'extreme': 'экстремальный'
         },
-        'timezones': {
-            'Pacific/Midway': 'Остров Мидуэй',
-            'Pacific/Honolulu': 'Гонолулу',
-            'America/Anchorage': 'Анкоридж',
-            'America/Los_Angeles': 'Лос-Анджелес',
-            'America/Denver': 'Денвер',
-            'America/Chicago': 'Чикаго',
-            'America/New_York': 'Нью-Йорк',
-            'America/Halifax': 'Галифакс',
-            'America/St_Johns': "Сент-Джонс",
-            'America/Sao_Paulo': 'Сан-Паулу',
-            'America/Argentina/Buenos_Aires': 'Буэнос-Айрес',
-            'America/Noronha': 'Фернанду-ди-Норонья',
-            'Atlantic/Azores': 'Азорские острова',
-            'Europe/London': 'Лондон',
-            'Europe/Paris': 'Париж',
-            'Europe/Berlin': 'Берлин',
-            'Europe/Moscow': 'Москва',
-            'Asia/Dubai': 'Дубай',
-            'Asia/Karachi': 'Карачи',
-            'Asia/Kolkata': 'Калькутта',
-            'Asia/Bangkok': 'Бангкок',
-            'Asia/Shanghai': 'Шанхай',
-            'Asia/Tokyo': 'Токио',
-            'Australia/Sydney': 'Сидней'
-        },
         'saved_cities_title': "🏙️ Сохранённые города",
         'saved_cities_count': "🗂 Сохранено городов: {}",
         'remove_city_btn': "❌ Удалить",
@@ -347,32 +324,6 @@ LANGUAGES = {
             'very_high': 'very high',
             'extreme': 'extreme'
         },
-        'timezones': {
-            'Pacific/Midway': 'Midway Island',
-            'Pacific/Honolulu': 'Honolulu',
-            'America/Anchorage': 'Anchorage',
-            'America/Los_Angeles': 'Los Angeles',
-            'America/Denver': 'Denver',
-            'America/Chicago': 'Chicago',
-            'America/New_York': 'New York',
-            'America/Halifax': 'Halifax',
-            'America/St_Johns': "St. John's",
-            'America/Sao_Paulo': 'Sao Paulo',
-            'America/Argentina/Buenos_Aires': 'Buenos Aires',
-            'America/Noronha': 'Fernando de Noronha',
-            'Atlantic/Azores': 'Azores',
-            'Europe/London': 'London',
-            'Europe/Paris': 'Paris',
-            'Europe/Berlin': 'Berlin',
-            'Europe/Moscow': 'Moscow',
-            'Asia/Dubai': 'Dubai',
-            'Asia/Karachi': 'Karachi',
-            'Asia/Kolkata': 'Kolkata',
-            'Asia/Bangkok': 'Bangkok',
-            'Asia/Shanghai': 'Shanghai',
-            'Asia/Tokyo': 'Tokyo',
-            'Australia/Sydney': 'Sydney'
-        },
         'saved_cities_title': "🏙️ Saved Cities",
         'saved_cities_count': "🗂 Cities saved: {}",
         'remove_city_btn': "❌ Delete",
@@ -484,32 +435,6 @@ LANGUAGES = {
             'high': 'високий',
             'very_high': 'дуже високий',
             'extreme': 'екстремальний'
-        },
-        'timezones': {
-            'Pacific/Midway': 'Острів Мідвей',
-            'Pacific/Honolulu': 'Гонолулу',
-            'America/Anchorage': 'Анкоридж',
-            'America/Los_Angeles': 'Лос-Анджелес',
-            'America/Denver': 'Денвер',
-            'America/Chicago': 'Чикаго',
-            'America/New_York': 'Нью-Йорк',
-            'America/Halifax': 'Галіфакс',
-            'America/St_Johns': "Сент-Джонс",
-            'America/Sao_Paulo': 'Сан-Паулу',
-            'America/Argentina/Buenos_Aires': 'Буенос-Айрес',
-            'America/Noronha': 'Фернанду-ді-Норонья',
-            'Atlantic/Azores': 'Азорські острови',
-            'Europe/London': 'Лондон',
-            'Europe/Paris': 'Париж',
-            'Europe/Berlin': 'Берлін',
-            'Europe/Moscow': 'Москва',
-            'Asia/Dubai': 'Дубай',
-            'Asia/Karachi': 'Карачі',
-            'Asia/Kolkata': 'Калькутта',
-            'Asia/Bangkok': 'Бангкок',
-            'Asia/Shanghai': 'Шанхай',
-            'Asia/Tokyo': 'Токіо',
-            'Australia/Sydney': 'Сідней'
         },
         'saved_cities_title': "🏙️ Збережені міста",
         'saved_cities_count': "🗂 Збережено міст: {}",
@@ -759,13 +684,14 @@ class ChartGenerator:
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             
-            plt.xticks(rotation=45)
+            plt.xticks(rotation=45, fontsize=8)
             plt.tight_layout()
             
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png', dpi=150)
-            buffer.seek(0)
             plt.close(fig)
+            gc.collect()
+            buffer.seek(0)
             return buffer
         except Exception as e:
             logger.error(f"Error creating chart: {e}")
@@ -806,7 +732,7 @@ class ChartGenerator:
             
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-            plt.xticks(rotation=45)
+            plt.xticks(rotation=45, fontsize=8)
             
             ax.grid(True, alpha=0.3)
             ax.spines['top'].set_visible(False)
@@ -817,8 +743,9 @@ class ChartGenerator:
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
                        facecolor='#1a1a1a', edgecolor='none')
-            buffer.seek(0)
             plt.close(fig)
+            gc.collect()
+            buffer.seek(0)
             
             return buffer
         except Exception as e:
@@ -830,6 +757,72 @@ class ChartGenerator:
 # Инициализация DataManager с MongoDB
 data_manager = DataManager(MONGO_CONNECTION_STRING, MONGO_DB_NAME, MONGO_COLLECTION)
 weather_api = WeatherAPI(OWM_API_KEY)
+
+_weather_cache = {}
+_weather_cache_lock = Lock()
+WEATHER_CACHE_TTL = 300  # 5 минут
+
+USER_RATE_LIMIT = 20  # сообщений в минуту
+_user_msg_times = defaultdict(list)
+
+def check_rate_limit(chat_id):
+    now = time.time()
+    times = _user_msg_times[chat_id]
+    # удаляем старые
+    _user_msg_times[chat_id] = [t for t in times if now-t < 60]
+    if len(_user_msg_times[chat_id]) >= USER_RATE_LIMIT:
+        return False
+    _user_msg_times[chat_id].append(now)
+    return True
+
+_cache_cleanup_counter = 0
+
+def get_cached_weather(city, lang, api_func):
+    global _cache_cleanup_counter
+    now = time.time()
+    key = (city.lower(), lang)
+    with _weather_cache_lock:
+        entry = _weather_cache.get(key)
+        if entry and now - entry['ts'] < WEATHER_CACHE_TTL:
+            return entry['data']
+        _cache_cleanup_counter += 1
+        if _cache_cleanup_counter % 500 == 0:
+            # Удаляем устаревшие элементы
+            for k in list(_weather_cache.keys()):
+                if now - _weather_cache[k]['ts'] > WEATHER_CACHE_TTL:
+                    del _weather_cache[k]
+    data = api_func(city, lang)
+    with _weather_cache_lock:
+        _weather_cache[key] = {'data': data, 'ts': now}
+    return data
+
+
+def generate_utc_timezone_keyboard(lang="ru"):
+    offsets = [
+        -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1,
+        0, 1, 2, 3, 3.5, 4, 4.5, 5, 5.5, 5.75, 6, 6.5,
+        7, 8, 8.75, 9, 9.5, 10, 10.5, 11, 12, 12.75, 13, 14
+    ]
+    markup = types.InlineKeyboardMarkup(row_width=3)
+    buttons = []
+    for offset in offsets:
+        label = f"UTC{offset:+g}"
+        callback = f"set_timezone_UTC{offset:+g}"
+        buttons.append(types.InlineKeyboardButton(label, callback_data=callback))
+    for i in range(0, len(buttons), 3):
+        markup.add(*buttons[i:i+3])
+    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_settings"))
+    return markup
+
+def parse_utc_timezone(tz_str):
+    import re
+    m = re.fullmatch(r"UTC([+-]?\d+(?:\.\d+)?)", tz_str)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except Exception:
+        return None
 
 # -- Helper Functions --
 def get_weather_icon(description: str) -> str:
@@ -871,6 +864,9 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         # Устанавливаем дефолтные настройки
         defaults = {
             'notification_city': None,
@@ -1205,6 +1201,9 @@ def set_notification_city(call):
 @bot.message_handler(content_types=['location'])
 def handle_location(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         if not msg.location:
             return
             
@@ -1233,6 +1232,9 @@ def handle_location(msg):
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['share_button'] for lang in LANGUAGES.keys()))
 def handle_share_button(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         # Получаем данные
         bot_username = bot.get_me().username
         lang = data_manager.get_user_settings(msg.chat.id)['language']
@@ -1270,6 +1272,9 @@ def handle_share_button(msg):
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['cities_button'] for lang in LANGUAGES.keys()))
 def show_saved_cities(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         
@@ -1298,6 +1303,9 @@ def show_saved_cities(msg):
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['chart_button'] for lang in LANGUAGES.keys()))
 def show_chart_options(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
@@ -1347,6 +1355,9 @@ def handle_chart_city(call):
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
+    if not check_rate_limit(msg.chat.id):
+        safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+        return
     settings = data_manager.get_user_settings(msg.chat.id)
     lang = settings['language']
     saved_cities = settings.get('saved_cities', [])
@@ -1405,7 +1416,7 @@ def handle_chart_date(call):
         _, city, date_str = call.data.split("_", 2)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        forecast_data = weather_api.get_forecast(city, lang)
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             return
@@ -1431,7 +1442,7 @@ def handle_chart_date(call):
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
-        forecast_data = weather_api.get_forecast(city, lang)
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
@@ -1511,7 +1522,7 @@ def send_weather_chart(call):
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         
-        forecast_data = weather_api.get_forecast(city, lang)
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             return
@@ -1593,7 +1604,7 @@ def process_new_city(msg, city=None):
             
             city_name = msg.text.strip()
             # Проверяем погоду для города (валидация)
-            weather_data = weather_api.get_current_weather(city_name, lang)
+            weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
             if not weather_data:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                 return
@@ -1644,6 +1655,9 @@ def process_new_city(msg, city=None):
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
@@ -1804,156 +1818,61 @@ def show_languages(call):
     )
 
 
-
-# 3. Обработчик смены языка
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_lang_"))
 def set_language(call):
-    lang = call.data.split("_")[2]  # ru/en/uk
+    lang = call.data.split("_")[2]
     data_manager.update_user_setting(call.message.chat.id, 'language', lang)
     
     bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
-    show_settings(call.message)  # Возврат в меню настроек    
-    
-# --- Выбор часового пояса ---
-def change_timezone_menu(call):
-    try:
-        bot.answer_callback_query(call.id)
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings.get('language', 'en')
-        
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        buttons = []
-        
-        # Получаем переведенные названия часовых поясов
-        timezones_translated = LANGUAGES[lang]['timezones']
-        
-        for tz_id, city_name in timezones_translated.items():
-            try:
-                tz = pytz.timezone(tz_id)
-                now = datetime.now(pytz.utc)
-                offset = tz.utcoffset(now)
-                hours = int(offset.total_seconds() // 3600)
-                minutes = abs(int((offset.total_seconds() % 3600) // 60))
-                
-                offset_str = f"UTC{hours:+d}"
-                if minutes > 0:
-                    offset_str += f":{minutes:02d}"
-                
-                buttons.append(types.InlineKeyboardButton(
-                    f"{city_name} ({offset_str})",
-                    callback_data=f"set_timezone_{tz_id}"
-                ))
-            except Exception as e:
-                logger.error(f"Error processing timezone {tz_id}: {e}")
-                continue
-        
-        # Разбиваем кнопки на два ряда для лучшего отображения
-        half = len(buttons) // 2
-        markup.add(*buttons[:half])
-        markup.add(*buttons[half:])
-        
-        # Кнопка возврата с учетом языка
-        markup.add(types.InlineKeyboardButton(
-            LANGUAGES[lang]['back_button'],
-            callback_data="back_to_settings"
-        ))
-        
-        bot.edit_message_text(
-            LANGUAGES[lang]['choose_timezone'],
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in change_timezone_menu: {e}")
-        safe_send_message(call.message.chat.id, LANGUAGES.get(lang, 'en')['error'].format(error=str(e)))
+    show_settings(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "timezone_settings")
-def timezone_settings(call):
-    try:
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings.get('language', 'en')
-        timezones_translated = LANGUAGES[lang]['timezones']
-        
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        
-        # Создаем список кортежей (tz_id, city_name) для сортировки
-        tz_list = [(tz_id, city_name) for tz_id, city_name in timezones_translated.items()]
-        
-        # Сортируем по смещению UTC
-        def get_utc_offset(tz_id):
-            try:
-                tz = pytz.timezone(tz_id)
-                return tz.utcoffset(datetime.now(pytz.utc)).total_seconds()
-            except:
-                return 0
-                
-        tz_list.sort(key=lambda x: get_utc_offset(x[0]))
-        
-        # Создаем кнопки с учетом сортировки
-        buttons = []
-        for tz_id, city_name in tz_list:
-            try:
-                tz = pytz.timezone(tz_id)
-                offset = tz.utcoffset(datetime.now(pytz.utc))
-                hours = int(offset.total_seconds() // 3600)
-                
-                buttons.append(types.InlineKeyboardButton(
-                    f"{city_name} (UTC{hours:+d})",
-                    callback_data=f"set_timezone_{tz_id}"
-                ))
-            except Exception as e:
-                logger.error(f"Error processing timezone {tz_id}: {e}")
-                continue
-        
-        # Разбиваем на два ряда для лучшего отображения
-        half = len(buttons) // 2
-        markup.add(*buttons[:half])
-        markup.add(*buttons[half:])
-        
-        markup.add(types.InlineKeyboardButton(
-            LANGUAGES[lang]['back_button'],
-            callback_data="back_to_settings"
-        ))
-        
-        bot.edit_message_text(
-            LANGUAGES[lang]['choose_timezone'],
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in timezone_settings: {e}")
-        safe_send_message(call.message.chat.id, LANGUAGES.get(lang, 'en')['error'].format(error=str(e)))
+def handle_timezone_settings(call):
+    lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'ru')
+    markup = generate_utc_timezone_keyboard(lang)
+    bot.edit_message_text(
+        LANGUAGES[lang]['choose_timezone'],
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup
+    )
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("set_timezone_"))
-def set_timezone(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith("set_timezone_UTC"))
+def set_utc_timezone(call):
     try:
-        tz = call.data.replace("set_timezone_", "")
-        data_manager.update_user_setting(call.message.chat.id, 'timezone', tz)
-        safe_send_message(call.message.chat.id, f"✅ Часовой пояс установлен: {tz}")
+        offset_str = call.data.replace("set_timezone_UTC", "")
+        try:
+            offset = float(offset_str)
+        except ValueError:
+            bot.answer_callback_query(call.id, "❌ Некорректное значение UTC")
+            return
+        data_manager.update_user_setting(call.message.chat.id, 'timezone', f"UTC{offset:+g}")
+        lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'ru')
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['timezone_set'].format(timezone=f"UTC{offset:+g}"))
         show_settings(call.message)
         bot.answer_callback_query(call.id)
     except Exception as e:
-        logger.error(f"Error in set_timezone: {e}")
+        logger.error(f"Error in set_utc_timezone: {e}")
+        bot.answer_callback_query(call.id, "❌ Ошибка")    
+
 
 @bot.message_handler(func=lambda m: True)
 def handle_text_message(msg):
+    if not check_rate_limit(msg.chat.id):
+        safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+        return
     text = msg.text.strip()
     if not text or any(char in text for char in [';', '"', "'", '\\']):
         safe_send_message(msg.chat.id, "Недопустимые символы в запросе")
         return
-    if len(text) > 100:  # Защита от длинных сообщений
+    if len(text) > 100:  
         safe_send_message(msg.chat.id, "Слишком длинный запрос")
         return
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         text = msg.text.strip()
-        
-        # Проверяем, не является ли это кнопкой
+
         all_button_texts = []
         for l in LANGUAGES.keys():
             all_button_texts.extend([
@@ -1963,30 +1882,24 @@ def handle_text_message(msg):
                 LANGUAGES[l]['chart_button'],
                 LANGUAGES[l]['send_location']
             ])
-        
-        # Если это текст кнопки - игнорируем (уже обработано выше)
+
         if text in all_button_texts:
             return
-        
-        # Проверяем на команды
+
         if text.startswith('/'):
             return
-            
-        # Проверяем длину и содержание - если слишком короткое или содержит много эмодзи
+
         if len(text) < 2 or len(text) > 100:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['enter_city_or_location'])
             return
-        
-        # Проверяем погоду для введенного города
-        weather_data = weather_api.get_current_weather(text, lang)
+        weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
         if not weather_data:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
             return
-        
-        # Нормализуем название города
+ 
         city_name = weather_api.normalize_city_name(weather_data['name'])
         saved_cities = settings.get('saved_cities', [])
-        # Добавить город в сохраненные если его там нет
+
         if city_name not in saved_cities:
             if len(saved_cities) < 5:
                 saved_cities.append(city_name)
@@ -2001,27 +1914,23 @@ def handle_text_message(msg):
 
 def send_current_weather(chat_id, city, lang, lat=None, lon=None):
     try:
-        current_data = weather_api.get_current_weather(city, lang)
+        current_data = get_cached_weather(city, lang, weather_api.get_current_weather)
         if not current_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
-        
-        # Основные данные
+
         temp = round(current_data['main']['temp'])
         feels_like = round(current_data['main']['feels_like'])
         description = current_data['weather'][0]['description'].title()
         icon = get_weather_icon(current_data['weather'][0]['description'])
-        
-        # Ветер
+
         wind_speed = current_data['wind']['speed']
         wind_gust = current_data['wind'].get('gust', wind_speed)
         wind_dir = get_wind_direction(current_data['wind'].get('deg'), lang)
-        
-        # Солнце
+
         sunrise = datetime.fromtimestamp(current_data['sys']['sunrise']).strftime('%H:%M')
         sunset = datetime.fromtimestamp(current_data['sys']['sunset']).strftime('%H:%M')
-        
-        # UV индекс
+
         uv_info = ""
         if lat and lon:
             uv, risk = get_uv_index(lat, lon)
@@ -2041,8 +1950,7 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
         
         safe_send_message(chat_id, message, parse_mode="Markdown")
         
-        # Отправляем график
-        forecast_data = weather_api.get_forecast(city, lang)
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if forecast_data:
             chart_buffer = ChartGenerator.create_temperature_precipitation_chart(forecast_data, city, lang)
             if chart_buffer:
@@ -2087,17 +1995,15 @@ def get_wind_direction(degrees, lang='en'):
 
 def send_forecast(chat_id: int, city: str, lang: str):
     try:
-        forecast_data = weather_api.get_forecast(city, lang)
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
 
-        # Получаем текущую погоду тоже
-        current_data = weather_api.get_current_weather(city, lang)
+        current_data = get_cached_weather(city, lang, weather_api.get_current_weather)
         if current_data:
             send_current_weather(chat_id, city, lang)
 
-        # Формируем прогноз на несколько часов
         message = "\n\n" + LANGUAGES[lang]['hourly_forecast'] + "\n"
 
         for i, item in enumerate(forecast_data['list'][:8]):  # 8 записей = ~24 часа
@@ -2120,17 +2026,14 @@ def send_forecast(chat_id: int, city: str, lang: str):
         logger.error(f"Error in send_forecast: {e}")
         safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
 
-# -- Notification System --
 def send_notifications():
     """Send daily weather notifications to users at their preferred time"""
     try:
         logger.info("[NOTIFICATIONS] Starting notification cycle")
-        
-        # Get current UTC time (more reliable than local time)
+
         utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         logger.debug(f"[NOTIFICATIONS] Current UTC time: {utc_now}")
-        
-        # Get all users with notifications enabled in one query
+
         users = data_manager.collection.find({
             'notifications': True,
             'saved_cities': {'$exists': True, '$ne': []}
@@ -2144,24 +2047,26 @@ def send_notifications():
                 chat_id = user["chat_id"]
                 settings = data_manager.get_user_settings(chat_id)  # Get fresh settings
                 lang = settings.get('language', 'en')
-                
-                # Skip if no saved cities or notifications disabled
+
                 if not settings.get('notifications', False) or not settings.get('saved_cities'):
                     continue
-                
-                # Get user's timezone
+
                 timezone_str = settings.get('timezone', 'UTC')
                 try:
-                    user_tz = pytz.timezone(timezone_str)
+                    offset = parse_utc_timezone(timezone_str)
+                    if offset is not None:
+                        user_tz = pytz.FixedOffset(int(offset*60))
+                    else:
+                        user_tz = pytz.UTC
+                    user_now = utc_now.astimezone(user_tz)
+
                 except pytz.UnknownTimeZoneError:
                     logger.warning(f"[NOTIFICATIONS] Unknown timezone {timezone_str} for user {chat_id}, using UTC")
                     user_tz = pytz.UTC
-                
-                # Convert UTC to user's local time
+
                 user_now = utc_now.astimezone(user_tz)
                 today_str = user_now.strftime('%Y-%m-%d')
                 
-                # Parse notification time (default to 20:00)
                 notification_time = settings.get('notification_time', '20:00')
                 try:
                     notif_hour, notif_minute = map(int, notification_time.split(':'))
@@ -2169,30 +2074,24 @@ def send_notifications():
                     logger.warning(f"[NOTIFICATIONS] Invalid time format {notification_time} for user {chat_id}, using 20:00")
                     notif_hour, notif_minute = 20, 0
                 
-                # Check if it's time to send notification
                 if (user_now.hour, user_now.minute) != (notif_hour, notif_minute):
                     continue
                 
-                # Check if we already sent notification today
                 last_sent = settings.get('last_notification_date')
                 if last_sent == today_str:
                     logger.debug(f"[NOTIFICATIONS] Already sent to {chat_id} today")
                     continue
                 
-                # Get notification city (default to first saved city)
                 notification_city = settings.get('notification_city')
                 saved_cities = settings.get('saved_cities', [])
                 city = notification_city if notification_city in saved_cities else saved_cities[0]
-                
-                # Calculate tomorrow's date in user's timezone
+
                 tomorrow_date = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
                 
                 logger.info(f"[NOTIFICATIONS] Sending to {chat_id} for {city} ({tomorrow_date})")
                 
-                # Send forecast
                 send_forecast_for_date(chat_id, city, lang, tomorrow_date)
                 
-                # Update last sent date
                 data_manager.update_user_setting(chat_id, 'last_notification_date', today_str)
                 notification_count += 1
                 
@@ -2214,7 +2113,7 @@ def notification_scheduler():
     while True:
         try:
             schedule.run_pending()
-            time.sleep(30)  # Проверяем каждые 30 секунд
+            time.sleep(30) 
         except Exception as e:
             logger.error(f"Error in notification scheduler: {e}")
             time.sleep(60)
@@ -2256,7 +2155,6 @@ def process_notification_time(msg):
 
         time_text = msg.text.strip()
 
-        # Проверить формат времени
         try:
             datetime.strptime(time_text, '%H:%M')
             data_manager.update_user_setting(msg.chat.id, 'notification_time', time_text)
@@ -2346,10 +2244,12 @@ def handle_clear_confirmation(call):
     except Exception as e:
         logger.error(f"Error in handle_clear_confirmation: {e}")
 
-# -- Help Command --
 @bot.message_handler(commands=['help'])
 def cmd_help(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
 
@@ -2359,11 +2259,13 @@ def cmd_help(msg):
     except Exception as e:
         logger.error(f"Error in cmd_help: {e}")
 
-# -- Error Handler --
 @bot.message_handler(func=lambda message: True, content_types=['audio', 'photo', 'voice', 'video', 'document',
                                                               'sticker', 'video_note', 'contact', 'venue'])
 def handle_unsupported_content(msg):
     try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
 
@@ -2375,7 +2277,6 @@ def handle_unsupported_content(msg):
     except Exception as e:
         logger.error(f"Error in handle_unsupported_content: {e}")
 
-# -- Main Execution --
 from flask import Flask, request
 import os
 
@@ -2398,14 +2299,12 @@ def healthcheck():
     return "ok", 200
 
 def test_connections():
-    # Проверка MongoDB
     try:
         data_manager.client.admin.command('ping')
         print("✅ MongoDB connection successful")
     except Exception as e:
         print(f"❌ MongoDB failed: {e}")
 
-    # Проверка OpenWeather
     test_weather = weather_api.get_current_weather("London", "en")
     print(f"🌤️ Weather test: {'✅' if test_weather else '❌'}")
 
@@ -2414,7 +2313,6 @@ if __name__ == '__main__':
 
     def init_background_tasks():
         try:
-            # Проверка API
             try:
                 test_forecast = weather_api.get_forecast("London", "en")
                 if not test_forecast:
@@ -2422,15 +2320,12 @@ if __name__ == '__main__':
             except Exception as test_e:
                 logger.error(f"❌ OpenWeather API check failed: {test_e}")
 
-
-            # Устанавливаем webhook для Telegram
             set_hook = bot.set_webhook(url=WEBHOOK_URL)
             if set_hook:
                 logger.info(f"✅ Webhook set to {WEBHOOK_URL}")
             else:
                 logger.error(f"❌ Failed to set webhook to {WEBHOOK_URL}")
 
-            # Запуск планировщика уведомлений
             scheduler_thread = threading.Thread(target=notification_scheduler, daemon=True)
             scheduler_thread.start()
         except Exception as e:
@@ -2438,11 +2333,9 @@ if __name__ == '__main__':
 
     threading.Thread(target=self_ping, daemon=True).start()
 
-    # Запускаем фоновые задачи без блокировки Flask
     threading.Thread(target=init_background_tasks, daemon=True).start()
 
     try:
-        # Flask стартует сразу
         app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
     except Exception as e:
         logger.error(f"💥 Critical error: {e}")
