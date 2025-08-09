@@ -481,8 +481,7 @@ class DataManager:
             if not MONGO_CONNECTION_STRING.startswith("mongodb"):
                 raise ValueError("Invalid MongoDB URI format")
             
-            # Добавляем обязательные параметры, если их нет
-            if "retryWrites=true" not in MONGO_CONNECTION_STRING.lower():
+            if "retryWrites=true" not in MONGO_CONNECTION_STRING and "w=majority" not in MONGO_CONNECTION_STRING:
                 if "?" in MONGO_CONNECTION_STRING:
                     MONGO_CONNECTION_STRING += "&retryWrites=true&w=majority"
                 else:
@@ -1338,6 +1337,7 @@ def show_chart_options(msg):
 def handle_chart_city(call):
     try:
         city = call.data.split("_", 1)[1]
+        city = weather_api.normalize_city_name(city)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         today = datetime.now()
@@ -1352,8 +1352,29 @@ def handle_chart_city(call):
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_chart'], reply_markup=markup)
         bot.answer_callback_query(call.id)
     except Exception as e:
-        logger.error(f"Error in handle_chart_city: {e}")        
+        logger.error(f"Error in handle_chart_city: {e}")
+        safe_send_message(call.message.chat.id, f"Ошибка: {e}")     
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
+def handle_forecast_city(call):
+    try:
+        city = call.data.split("_", 1)[1]
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        today = datetime.now()
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        weekdays = LANGUAGES[lang]['weekdays']
+        for i in range(5):
+            date = today + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            weekday_idx = date.weekday() % 7
+            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
+            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_forecast'], reply_markup=markup)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_forecast_city: {e}")
+        safe_send_message(call.message.chat.id, "Ошибка при выборе даты")
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
@@ -1396,8 +1417,8 @@ def handle_chart_date(call):
         city = weather_api.normalize_city_name(city)
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
 
-        # Критическая проверка:
-        if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
+        # ВАЖНО: проверяем наличие forecast_data и forecast_data['list']!
+        if not forecast_data or not isinstance(forecast_data, dict) or 'list' not in forecast_data or not forecast_data['list']:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
@@ -1423,7 +1444,6 @@ def handle_chart_date(call):
         lang = data_manager.get_user_settings(call.message.chat.id)['language']
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))
         bot.answer_callback_query(call.id)
-
 
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
