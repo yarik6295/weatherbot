@@ -959,59 +959,38 @@ def set_initial_language(call):
     try:
         lang = call.data.split('_')[3]
         data_manager.update_user_setting(call.message.chat.id, 'language', lang)
-        
-        # Создаем основную клавиатуру
-        main_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        main_kb.row(
-            types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
-            types.KeyboardButton(LANGUAGES[lang]['chart_button'])
-        )
-        main_kb.row(
-            types.KeyboardButton(LANGUAGES[lang]['settings_button']),
-            types.KeyboardButton(LANGUAGES[lang]['share_button'])
-        )
-        
-        # Добавляем кнопку геолокации если нет сохраненных городов
-        if not data_manager.get_user_settings(call.message.chat.id).get('saved_cities'):
-            main_kb.add(
-                types.KeyboardButton(
-                    LANGUAGES[lang]['send_location'],
-                    request_location=True
-                )
-            )
 
-        # Удаляем предыдущие сообщения
+        # Создаем основную клавиатуру (НЕ добавляем туда геолокацию)
+        main_kb = create_main_keyboard(call.message.chat.id)
+
+        # Отправляем приветствие
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        
-        # Отправляем финальное сообщение
         bot.send_message(
             call.message.chat.id,
             LANGUAGES[lang]['welcome'],
             parse_mode="Markdown",
             reply_markup=main_kb
         )
-        
-        # Отдельно просим локацию только если нет сохраненных городов
-        if not data_manager.get_user_settings(call.message.chat.id).get('saved_cities'):
-            geo_markup = types.ReplyKeyboardMarkup(
-                resize_keyboard=True, 
-                one_time_keyboard=True
+
+        # ВСЕГДА показываем дополнительную клавиатуру с геолокацией!
+        geo_markup = types.ReplyKeyboardMarkup(
+            resize_keyboard=True, 
+            one_time_keyboard=True
+        )
+        geo_markup.add(
+            types.KeyboardButton(
+                LANGUAGES[lang]['send_location'],
+                request_location=True
             )
-            geo_markup.add(
-                types.KeyboardButton(
-                    LANGUAGES[lang]['send_location'],
-                    request_location=True
-                )
-            )
-            
-            bot.send_message(
-                call.message.chat.id,
-                LANGUAGES[lang]['ask_location'],
-                reply_markup=geo_markup
-            )
-        
+        )
+        bot.send_message(
+            call.message.chat.id,
+            LANGUAGES[lang]['ask_location'],
+            reply_markup=geo_markup
+        )
+
         bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
-        
+
     except Exception as e:
         logger.error(f"Set language error: {e}")
 
@@ -1287,7 +1266,7 @@ def show_saved_cities(msg):
         for city in saved_cities:
             markup.add(
                 types.InlineKeyboardButton(f"🌤️ {city}", callback_data=f"weather_{city}"),
-                types.InlineKeyboardButton("🗑️", callback_data=f"remove_{city}")
+                types.InlineKeyboardButton("🗑️", callback_data=f"remove_city_{city}")
             )
         markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
         
@@ -1518,8 +1497,9 @@ def show_city_forecast(call):
         city = call.data.split('_', 1)[1]
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        
-        send_forecast(call.message.chat.id, city, lang)
+        # Берём сегодняшнюю дату
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        send_forecast_for_date(call.message.chat.id, city, lang, today_str)
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in show_city_forecast: {e}")
@@ -1550,42 +1530,22 @@ def send_weather_chart(call):
     except Exception as e:
         logger.error(f"Error in send_weather_chart: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('remove_'))
-def remove_city(call):
-    try:
-        city = call.data.split('_', 1)[1]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        
-        saved_cities = settings.get('saved_cities', [])
-        if city in saved_cities:
-            saved_cities.remove(city)
-            data_manager.update_user_setting(call.message.chat.id, 'saved_cities', saved_cities)
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['city_removed'].format(city=city))
-        
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in remove_city: {e}")
-
 @bot.callback_query_handler(func=lambda call: call.data == "add_city")
 def request_new_city(call):
     try:
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        
+
         if len(settings.get('saved_cities', [])) >= 5:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['max_cities'])
             return
-            
-        # Создаем клавиатуру с кнопкой геолокации
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+        # Клавиатура только с кнопкой геолокации
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add(
-            types.KeyboardButton(
-                LANGUAGES[lang]['request_location'],
-                request_location=True
-            )
+            types.KeyboardButton(LANGUAGES[lang]['request_location'], request_location=True)
         )
-        
+
         msg = bot.send_message(
             call.message.chat.id,
             f"{LANGUAGES[lang]['enter_city']}\n\n"
@@ -1593,7 +1553,7 @@ def request_new_city(call):
             reply_markup=markup
         )
         bot.register_next_step_handler(msg, process_new_city)
-        
+
     except Exception as e:
         logger.error(f"Error in request_new_city: {e}")
 
@@ -1771,36 +1731,21 @@ def show_saved_cities_settings(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("remove_city_"))
 def remove_city_handler(call):
     try:
-        city = call.data.split('_', 2)[2]  # Извлекаем название города
+        city = call.data[len("remove_city_"):]  # Корректно для названий городов с "_"
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
 
         if city in saved_cities:
-            # Удаляем город
             saved_cities.remove(city)
             data_manager.update_user_setting(call.message.chat.id, 'saved_cities', saved_cities)
-            
-            # Обновляем сообщение
-            if saved_cities:
-                show_saved_cities_settings(call)
-            else:
-                bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text=LANGUAGES[lang]['no_cities_text'],
-                    reply_markup=types.InlineKeyboardMarkup().add(
-                        types.InlineKeyboardButton(
-                            LANGUAGES[lang]['back_button'],
-                            callback_data="back_to_settings"
-                        )
-                    )
-                )
-            
-            bot.answer_callback_query(call.id, f"🗑️ {city} удалён")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['city_removed'].format(city=city))
+            # Обновить список городов после удаления
+            show_saved_cities_settings(call)
         else:
-            bot.answer_callback_query(call.id, "⚠️ Город не найден")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
 
+        bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in remove_city_handler: {e}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка удаления")
