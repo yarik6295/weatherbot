@@ -152,7 +152,7 @@ LANGUAGES = {
         'city_added': "✅ Город {city} добавлен",
         'city_removed': "🗑️ Город {city} удален",
         'max_cities': "⚠️ Максимум 5 городов",
-        'saved_cities': "🏙️ Сохраненные города:",
+        'saved_cities': "🌆 Мои города:",
         'no_saved_cities': "📍 Нет сохраненных городов",
         'add_city': "➕ Добавить город",
         'notifications_on': "🔔 Отключить уведомления",
@@ -161,7 +161,7 @@ LANGUAGES = {
         'settings_menu': "⚙️ *Настройки*\n\n🔔 Уведомления: {notifications}\n🕐 Время: {time}\n🌐 Язык: {lang}\n🏙️ Городов сохранено: {cities}\n🕒 🌍 Часовой пояс: {timezone}",
         'choose_notification_city_button': "🌆 Город для уведомлений: {city}",
         'choose_notification_city': "🌆 Выберите город для ежедневных уведомлений:",
-        'timezone_button': "🌍 Изменить часовой пояс",
+        'timezone_button': "🌍 Часовой пояс",
         'on': "включены",
         'off': "отключены",
         'notifications_status': "🔔 Уведомления {status}",
@@ -212,7 +212,7 @@ LANGUAGES = {
             'very_high': 'очень высокий',
             'extreme': 'экстремальный'
         },
-        'saved_cities_title': "🏙️ Сохранённые города",
+        'saved_cities_title': "🌆 Мои города",
         'saved_cities_count': "🗂 Сохранено городов: {}",
         'remove_city_btn': "❌ Удалить",
         'forecast_city_btn': "🌤️ Прогноз",
@@ -233,7 +233,7 @@ LANGUAGES = {
             "📍 To start, send your city or location:",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
-        'cities_button': "🏙️ My Cities",
+        'cities_button': "🌆 My Cities",
         'settings_button': "⚙️ Settings",
         'chart_button': "📊 Chart",
         'send_location': "📍 Location",
@@ -324,7 +324,7 @@ LANGUAGES = {
             'very_high': 'very high',
             'extreme': 'extreme'
         },
-        'saved_cities_title': "🏙️ Saved Cities",
+        'saved_cities_title': "🌆 My Cities",
         'saved_cities_count': "🗂 Cities saved: {}",
         'remove_city_btn': "❌ Delete",
         'forecast_city_btn': "🌤️ Forecast", 
@@ -345,7 +345,7 @@ LANGUAGES = {
             "📍 Для початку надішліть своє місто або місцезнаходження:",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
-        'cities_button': "🏙️ Мої міста",
+        'cities_button': "🌆 Мої міста",
         'settings_button': "⚙️ Налаштування",
         'chart_button': "📊 Графік",
         'send_location': "📍 Геолокація",
@@ -436,7 +436,7 @@ LANGUAGES = {
             'very_high': 'дуже високий',
             'extreme': 'екстремальний'
         },
-        'saved_cities_title': "🏙️ Збережені міста",
+        'saved_cities_title': "🌆 Мої міста",
         'saved_cities_count': "🗂 Збережено міст: {}",
         'remove_city_btn': "❌ Видалити",
         'forecast_city_btn': "🌤️ Прогноз",
@@ -701,7 +701,7 @@ class ChartGenerator:
         matplotlib.use('Agg')
         plt.ioff()
         try:
-            if not forecast_data or 'list' not in forecast_data:
+            if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
                 return None
                 
             # Добавьте проверку данных:
@@ -1422,6 +1422,9 @@ def handle_chart_date(call):
             return
         # Фильтруем только по выбранной дате
         filtered = {'list': [item for item in forecast_data['list'] if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str]}
+        if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
         if not filtered['list']:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             return
@@ -1443,6 +1446,12 @@ def handle_chart_date(call):
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
+        if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
+            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['ru'])['not_found'])
+            return
+        if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
+            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['ru'])['not_found'])
+            return
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
