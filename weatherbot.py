@@ -1322,7 +1322,8 @@ def show_chart_options(msg):
             cities = saved_cities
         markup = types.InlineKeyboardMarkup(row_width=2)
         for city in cities:
-            markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
+            norm_city = weather_api.normalize_city_name(city)
+            markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{norm_city}"))
         markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
         safe_send_message(
             msg.chat.id,
@@ -1357,6 +1358,8 @@ def handle_chart_city(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
 def handle_forecast_city(call):
+    city = call.data.split("_", 1)[1]
+    city = weather_api.normalize_city_name(city)
     try:
         city = call.data.split("_", 1)[1]
         settings = data_manager.get_user_settings(call.message.chat.id)
@@ -1390,7 +1393,8 @@ def show_forecast_options(msg):
     # Новый UX: сначала выбор города, потом даты
     markup = types.InlineKeyboardMarkup(row_width=2)
     for city in saved_cities:
-        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
+        norm_city = weather_api.normalize_city_name(city)
+        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{norm_city}"))
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
     safe_send_message(
         msg.chat.id,
