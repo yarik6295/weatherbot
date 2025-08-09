@@ -1603,9 +1603,15 @@ def process_new_city(msg, city=None):
             safe_send_message(
                 msg.chat.id,
                 LANGUAGES[lang]['city_added'].format(city=city_name),
-                reply_markup=types.ReplyKeyboardRemove()  # Скрываем клавиатуру
+                reply_markup=types.ReplyKeyboardRemove()  # Скрываем клавиатуру геолокации
             )
             send_current_weather(msg.chat.id, city_name, lang)
+            # Показываем главное меню
+            safe_send_message(
+                msg.chat.id,
+                LANGUAGES[lang]['main_menu'],
+                reply_markup=create_main_keyboard(msg.chat.id)
+            )
         else:
             safe_send_message(
                 msg.chat.id,
