@@ -1883,20 +1883,18 @@ def handle_text_message(msg):
                 LANGUAGES[l]['send_location']
             ])
 
-        if text in all_button_texts:
-            return
-
-        if text.startswith('/'):
+        if text in all_button_texts or text.startswith('/'):
             return
 
         if len(text) < 2 or len(text) > 100:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['enter_city_or_location'])
             return
-        weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
-        if not weather_data:
+
+        weather_data = get_cached_weather(text, lang, weather_api.get_current_weather)
+        if not weather_data or 'name' not in weather_data:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
             return
- 
+
         city_name = weather_api.normalize_city_name(weather_data['name'])
         saved_cities = settings.get('saved_cities', [])
 
