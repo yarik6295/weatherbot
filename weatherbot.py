@@ -511,19 +511,47 @@ import logging
 # -- Data Management --
 class DataManager:
     def __init__(self, MONGO_CONNECTION_STRING: str, db_name: str, collection_name: str):
-        # Добавляем connection pooling
-        self.client = MongoClient(
-            MONGO_CONNECTION_STRING,
-            serverSelectionTimeoutMS=5000,
-            maxPoolSize=50,
-            waitQueueTimeoutMS=2500,
-            tls=True,
-            tlsAllowInvalidCertificates=False
-        )
-        
-        # Добавляем индексы для ускорения запросов
-        self.collection.create_index([("chat_id", 1)], unique=True)
-        self.collection.create_index([("last_activity", 1)])
+        try:
+            # Очищаем URI от лишних символов
+            MONGO_CONNECTION_STRING = MONGO_CONNECTION_STRING.strip()
+            
+            # Проверяем, что URI начинается с mongodb
+            if not MONGO_CONNECTION_STRING.startswith("mongodb"):
+                raise ValueError("Invalid MongoDB URI format")
+            
+            # Добавляем параметры подключения, если их нет
+            if "retryWrites=true" not in MONGO_CONNECTION_STRING and "w=majority" not in MONGO_CONNECTION_STRING:
+                if "?" in MONGO_CONNECTION_STRING:
+                    MONGO_CONNECTION_STRING += "&retryWrites=true&w=majority"
+                else:
+                    MONGO_CONNECTION_STRING += "?retryWrites=true&w=majority"
+            
+            # Инициализируем подключение с улучшенными параметрами
+            self.client = MongoClient(
+                MONGO_CONNECTION_STRING,
+                serverSelectionTimeoutMS=5000,
+                maxPoolSize=50,
+                waitQueueTimeoutMS=2500,
+                tls=True,
+                tlsAllowInvalidCertificates=False
+            )
+            
+            # Проверяем подключение
+            self.client.admin.command('ping')
+            
+            # Создаем базу данных и коллекцию
+            self.db = self.client[db_name]
+            self.collection = self.db[collection_name]
+            
+            # После создания коллекции создаем индексы
+            self.collection.create_index([("chat_id", 1)], unique=True)
+            self.collection.create_index([("last_activity", 1)])
+            
+            logger.info("✅ MongoDB подключение успешно!")
+            
+        except Exception as e:
+            logger.error(f"❌ FATAL ERROR: MongoDB connection failed - {str(e)}")
+            raise SystemExit(1)
         
     def get_user_settings(self, chat_id: int) -> dict:
         # Добавляем кэширование частых запросов
