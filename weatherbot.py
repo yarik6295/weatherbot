@@ -22,6 +22,7 @@ from datetime import timezone
 import gc
 from threading import Lock
 from collections import defaultdict
+import socket
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -573,9 +574,12 @@ class DataManager:
 class WeatherAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://api.openweathermap.org/data/2.5"
-        self.timeout = 15  # секунд
-        self.max_retries = 3
+        self.base_urls = [
+            "https://api.openweathermap.org/data/2.5",
+            "https://pro.openweathermap.org/data/2.5"  # fallback
+        ]
+        self.timeout = 10
+        self.max_retries = 2
     
     def normalize_city_name(self, city: str) -> str:
         """Нормализация названия города для избежания дубликатов"""
@@ -611,59 +615,35 @@ class WeatherAPI:
         except ValueError as e:
             logger.error(f"API JSON decode error: {e}")
             return None
-    
+
+    def _make_request(self, base_url, city, lang):
+        params = {
+            'q': city,
+            'appid': self.api_key,
+            'units': 'metric',
+            'lang': lang
+        }
+        try:
+            response = requests.get(
+                f"{base_url}/forecast",
+                params=params,
+                timeout=self.timeout,
+                headers={'User-Agent': 'WeatherBot/2.0'}
+            )
+            if response.status_code == 200:
+                return response.json()
+            logger.error(f"API Error {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"Request failed: {str(e)}")
+        return None
+
     def get_forecast(self, city: str, lang: str = 'en') -> Optional[Dict]:
-        for attempt in range(self.max_retries):
-            try:
-                params = {
-                    'q': city,
-                    'appid': self.api_key,
-                    'units': 'metric',
-                    'lang': lang,
-                    'cnt': 40
-                }
-                
-                # Добавляем проверку интернет-соединения
-                try:
-                    requests.get("https://www.google.com", timeout=5)
-                except:
-                    logger.error("No internet connection")
-                    return None
-
-                response = requests.get(
-                    f"{self.base_url}/forecast",
-                    params=params,
-                    timeout=self.timeout,
-                    headers={'User-Agent': 'Mozilla/5.0'}
-                )
-
-                # Детальный анализ ответа
-                if response.status_code == 0:
-                    logger.error(f"Network failure. Details: {str(response.raw)}")
-                    continue
-                    
-                if response.status_code == 401:
-                    logger.critical("Invalid API key")
-                    return None
-                    
-                response.raise_for_status()
-                
-                data = response.json()
-                
-                if not isinstance(data, dict):
-                    logger.error("Invalid API response format")
-                    continue
-                    
-                if data.get('cod') != 200:
-                    logger.error(f"API error: {data.get('message')}")
-                    continue
-                    
-                return data
-                
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
-                time.sleep(1)  # Задержка между попытками
-                
+        for base_url in self.base_urls:
+            for attempt in range(self.max_retries):
+                data = self._make_request(base_url, city, lang)
+                if data:
+                    return data
+                time.sleep(1)
         return None
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
@@ -818,7 +798,35 @@ class ChartGenerator:
             logger.error(f"Error creating chart: {e}")
             return None
 
+class BackupWeatherSource:
+    def get_forecast(self, city: str, lang: str) -> Optional[Dict]:
+        try:
+            # Можно добавить fallback на другой API
+            response = requests.get(
+                f"https://api.weatherapi.com/v1/forecast.json?key=ВАШ_КЛЮЧ&q={city}&days=3",
+                timeout=10
+            )
+            if response.status_code == 200:
+                return self._convert_format(response.json())
+        except:
+            return None
 
+    def _convert_format(self, data):
+        # Конвертация формата другого API в нужный формат
+        return {
+            'list': [
+                {
+                    'dt': item['time_epoch'],
+                    'main': {
+                        'temp': item['temp_c'],
+                        'feels_like': item['feelslike_c']
+                    },
+                    'weather': [{
+                        'description': item['condition']['text']
+                    }]
+                } for item in data['forecast']['forecastday'][0]['hour']
+            ]
+        }
 
 # Инициализация DataManager с MongoDB
 data_manager = DataManager(MONGO_CONNECTION_STRING, MONGO_DB_NAME, MONGO_COLLECTION)
@@ -830,6 +838,36 @@ WEATHER_CACHE_TTL = 300  # 5 минут
 
 USER_RATE_LIMIT = 20  # сообщений в минуту
 _user_msg_times = defaultdict(list)
+
+def check_internet_connection():
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=5)
+        return True
+    except OSError:
+        return False
+
+if not check_internet_connection():
+    logger.critical("Нет подключения к интернету")
+    exit(1)
+
+def start_bot():
+    # Проверка подключения
+    if not check_internet_connection():
+        logger.critical("Нет интернет-соединения")
+        return
+
+    # Проверка API
+    test_data = weather_api.get_forecast("London")
+    if not test_data:
+        logger.warning("Основной API недоступен, пробую резервный...")
+        weather_api.backup_source = BackupWeatherSource()
+        test_data = weather_api.backup_source.get_forecast("London", "en")
+        if not test_data:
+            logger.critical("Все источники недоступны")
+            return
+
+    # Запуск бота
+    bot.polling()
 
 def test_api_connection():
     test_cities = ["London", "Moscow", "Tokyo"]
