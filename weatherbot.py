@@ -574,6 +574,8 @@ class WeatherAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://api.openweathermap.org/data/2.5"
+        self.timeout = 15  # секунд
+        self.max_retries = 3
     
     def normalize_city_name(self, city: str) -> str:
         """Нормализация названия города для избежания дубликатов"""
@@ -611,47 +613,58 @@ class WeatherAPI:
             return None
     
     def get_forecast(self, city: str, lang: str = 'en') -> Optional[Dict]:
-        try:
-            params = {
-                'q': city,
-                'appid': self.api_key,
-                'units': 'metric',
-                'lang': lang,
-                'cnt': 40
-            }
-            response = requests.get(
-                f"{self.base_url}/forecast",
-                params=params,
-                timeout=15
-            )
-            
-            # Добавляем детальное логирование
-            logger.debug(f"API Response: Status={response.status_code}, Body={response.text[:200]}...")
-            
-            if response.status_code != 200:
-                logger.error(f"API Error {response.status_code}: {response.text}")
-                return None
+        for attempt in range(self.max_retries):
+            try:
+                params = {
+                    'q': city,
+                    'appid': self.api_key,
+                    'units': 'metric',
+                    'lang': lang,
+                    'cnt': 40
+                }
                 
-            data = response.json()
-            
-            # Проверяем структуру ответа
-            if not isinstance(data, dict):
-                logger.error("API returned non-dict response")
-                return None
+                # Добавляем проверку интернет-соединения
+                try:
+                    requests.get("https://www.google.com", timeout=5)
+                except:
+                    logger.error("No internet connection")
+                    return None
+
+                response = requests.get(
+                    f"{self.base_url}/forecast",
+                    params=params,
+                    timeout=self.timeout,
+                    headers={'User-Agent': 'Mozilla/5.0'}
+                )
+
+                # Детальный анализ ответа
+                if response.status_code == 0:
+                    logger.error(f"Network failure. Details: {str(response.raw)}")
+                    continue
+                    
+                if response.status_code == 401:
+                    logger.critical("Invalid API key")
+                    return None
+                    
+                response.raise_for_status()
                 
-            if 'cod' in data and data['cod'] != 200:
-                logger.error(f"API error: {data.get('message', 'Unknown error')}")
-                return None
+                data = response.json()
                 
-            if 'list' not in data:
-                logger.error("API response missing 'list' key")
-                return None
+                if not isinstance(data, dict):
+                    logger.error("Invalid API response format")
+                    continue
+                    
+                if data.get('cod') != 200:
+                    logger.error(f"API error: {data.get('message')}")
+                    continue
+                    
+                return data
                 
-            return data
-            
-        except Exception as e:
-            logger.error(f"Forecast request failed: {str(e)}", exc_info=True)
-            return None
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                time.sleep(1)  # Задержка между попытками
+                
+        return None
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
         """Генерирует погодные предупреждения на основе текущих условий"""
@@ -817,6 +830,21 @@ WEATHER_CACHE_TTL = 300  # 5 минут
 
 USER_RATE_LIMIT = 20  # сообщений в минуту
 _user_msg_times = defaultdict(list)
+
+def test_api_connection():
+    test_cities = ["London", "Moscow", "Tokyo"]
+    for city in test_cities:
+        data = weather_api.get_forecast(city)
+        if data:
+            logger.info(f"API test passed for {city}")
+            return True
+        logger.warning(f"API test failed for {city}")
+    return False
+
+if __name__ == '__main__':
+    if not test_api_connection():
+        logger.critical("API connection test failed. Shutting down.")
+        exit(1)
 
 def check_rate_limit(chat_id):
     now = time.time()
