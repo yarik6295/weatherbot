@@ -616,14 +616,33 @@ class WeatherAPI:
                 'q': city,
                 'appid': self.api_key,
                 'units': 'metric',
-                'lang': lang
+                'lang': lang,
+                'cnt': 40  # Получаем больше точек данных
             }
-            response = requests.get(f"{self.base_url}/forecast", params=params, timeout=15)
-            response.raise_for_status()
+            response = requests.get(
+                f"{self.base_url}/forecast", 
+                params=params, 
+                timeout=15,
+                verify=True
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Forecast API Error: {response.status_code} - {response.text}")
+                return None
+                
             data = response.json()
-            return data if isinstance(data, dict) and 'list' in data else None
+            
+            if not isinstance(data, dict) or 'list' not in data:
+                logger.error(f"Invalid forecast data structure: {data}")
+                return None
+                
+            return data
+            
         except requests.RequestException as e:
             logger.error(f"Error fetching forecast: {e}")
+            return None
+        except ValueError as e:
+            logger.error(f"API JSON decode error: {e}")
             return None
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
@@ -1417,16 +1436,23 @@ def handle_chart_date(call):
         
         # Получаем данные и логируем их
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
-        logger.info(f"Forecast data for {city}: {forecast_data}")
         
-        # Проверяем данные
-        if not forecast_data or not isinstance(forecast_data, dict) or 'list' not in forecast_data:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+        # Улучшенная проверка данных
+        if not forecast_data or not isinstance(forecast_data, dict):
+            logger.error(f"No valid forecast data for {city}")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Нет данных прогноза"))
+            bot.answer_callback_query(call.id)
+            return
+
+        if 'list' not in forecast_data or not forecast_data['list']:
+            logger.error(f"No 'list' in forecast data for {city}: {forecast_data}")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Нет данных для построения графика"))
             bot.answer_callback_query(call.id)
             return
 
         # Фильтруем данные по дате
         filtered = {
+            'city': forecast_data.get('city', {}),
             'list': [
                 item for item in forecast_data['list'] 
                 if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
@@ -1434,6 +1460,7 @@ def handle_chart_date(call):
         }
         
         if not filtered['list']:
+            logger.error(f"No data for {city} on {date_str}")
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
