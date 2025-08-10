@@ -625,6 +625,9 @@ class DataManager:
 class WeatherAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.base_url = "https://api.openweathermap.org/data/2.5"
+        self.backup_url = "https://pro.openweathermap.org/data/2.5"
+        self.timeout = 10
         self.session = requests.Session()
         self.session.mount('https://', requests.adapters.HTTPAdapter(
             max_retries=3,
@@ -1815,6 +1818,7 @@ def process_new_city(msg, city=None):
         city: название города или объект с координатами
     """
     try:
+        logger.info(f"Processing new city request: msg={msg.text if hasattr(msg, 'text') else 'No text'}, city={city}")
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings.get('language', 'ru')
         
@@ -1822,14 +1826,17 @@ def process_new_city(msg, city=None):
             # Обработка текстового ввода
             if city is None:
                 if not msg.text or len(msg.text.strip()) > 100:
+                    logger.warning(f"Invalid city name: {msg.text if hasattr(msg, 'text') else 'No text'}")
                     safe_send_message(msg.chat.id, LANGUAGES[lang]['city_not_found_try_english'])
                     return
                 city_name = msg.text.strip()
             else:
                 city_name = city
 
+            logger.info(f"Requesting forecast for city: {city_name}")
             weather_data = weather_api.get_forecast(city_name, lang)
             if not weather_data or 'city' not in weather_data:
+                logger.warning(f"No weather data for city: {city_name}")
                 safe_send_message(
                     msg.chat.id, 
                     LANGUAGES[lang]['city_not_found_try_english'],
@@ -1839,11 +1846,8 @@ def process_new_city(msg, city=None):
 
             final_city_name = weather_data['city'].get('name')
             if not final_city_name:
-                safe_send_message(
-                    msg.chat.id, 
-                    LANGUAGES[lang]['error_getting_city_data'], 
-                    reply_markup=types.ReplyKeyboardRemove()
-                )
+                logger.error(f"No city name in weather data for: {city_name}")
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['error_getting_city_data'])
                 return
 
         elif hasattr(city, 'latitude') and hasattr(city, 'longitude'):
@@ -1851,49 +1855,31 @@ def process_new_city(msg, city=None):
             try:
                 location = geolocator.reverse((city.latitude, city.longitude), exactly_one=True)
                 if not location or not location.raw.get('address'):
-                    safe_send_message(
-                        msg.chat.id, 
-                        LANGUAGES[lang]['location_city_not_found']
-                    )
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['location_city_not_found'])
                     return
 
                 address = location.raw['address']
                 city_name = address.get('city') or address.get('town') or address.get('village')
                 if not city_name:
-                    safe_send_message(
-                        msg.chat.id, 
-                        LANGUAGES[lang]['location_city_not_found']
-                    )
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['location_city_not_found'])
                     return
 
                 weather_data = weather_api.get_forecast(city_name, lang)
                 if not weather_data or 'city' not in weather_data:
-                    safe_send_message(
-                        msg.chat.id, 
-                        LANGUAGES[lang]['weather_not_found']
-                    )
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['weather_not_found'])
                     return
 
                 final_city_name = weather_data['city'].get('name')
                 if not final_city_name:
-                    safe_send_message(
-                        msg.chat.id, 
-                        LANGUAGES[lang]['error_getting_city_data']
-                    )
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['error_getting_city_data'])
                     return
 
             except Exception as e:
                 logger.error(f"Geolocation error: {e}")
-                safe_send_message(
-                    msg.chat.id, 
-                    LANGUAGES[lang]['location_error']
-                )
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['location_error'])
                 return
         else:
-            safe_send_message(
-                msg.chat.id, 
-                LANGUAGES[lang]['invalid_data_format']
-            )
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_data_format'])
             return
 
         # Проверяем и сохраняем город
@@ -1934,39 +1920,45 @@ def process_new_city(msg, city=None):
         )
         send_main_menu(msg.chat.id, lang)
 
-def handle_text_message(msg):
-    """
-    Обрабатывает текстовые сообщения от пользователя
-    """
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_text(message):
+    """Обработчик для текстовых сообщений (названий городов)"""
     try:
-        settings = data_manager.get_user_settings(msg.chat.id)
+        if not check_rate_limit(message.chat.id):
+            safe_send_message(message.chat.id, "Подождите перед следующим запросом")
+            return
+            
+        settings = data_manager.get_user_settings(message.chat.id)
         lang = settings.get('language', 'ru')
         
-        if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['rate_limit_message'])
+        # Игнорируем служебные сообщения (кнопки меню и т.д.)
+        menu_buttons = [
+            LANGUAGES[lang]['forecast_button'], 
+            LANGUAGES[lang]['chart_button'],
+            LANGUAGES[lang]['settings_button'],
+            LANGUAGES[lang]['share_button'],
+            LANGUAGES[lang]['send_location'],
+            LANGUAGES[lang]['back'],
+            LANGUAGES[lang]['main_menu']
+        ]
+        
+        if message.text in menu_buttons:
+            logger.debug(f"Ignoring menu button: {message.text}")
             return
             
-        text = msg.text.strip()
-        if not text or len(text) > 100:
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['city_name_too_long'])
-            return
-            
-        if any(char in text for char in [';', '"', "'", '\\', '/', '|']):
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_city_chars'])
-            return
-            
-        process_new_city(msg)
-            
+        logger.info(f"Processing text message: {message.text} from user {message.chat.id}")
+        # Обрабатываем название города
+        process_new_city(message)
+        
     except Exception as e:
-        logger.error(f"Error in handle_text_message: {e}")
-        settings = data_manager.get_user_settings(msg.chat.id)
+        logger.error(f"Error handling text message: {e}")
+        settings = data_manager.get_user_settings(message.chat.id)
         lang = settings.get('language', 'ru')
         safe_send_message(
-            msg.chat.id,
+            message.chat.id,
             LANGUAGES[lang]['general_error'],
             reply_markup=types.ReplyKeyboardRemove()
         )
-
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
     try:
