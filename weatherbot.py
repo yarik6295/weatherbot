@@ -1322,8 +1322,7 @@ def show_chart_options(msg):
             cities = saved_cities
         markup = types.InlineKeyboardMarkup(row_width=2)
         for city in cities:
-            norm_city = weather_api.normalize_city_name(city)
-            markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{norm_city}"))
+                markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
         markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
         safe_send_message(
             msg.chat.id,
@@ -1338,7 +1337,6 @@ def show_chart_options(msg):
 def handle_chart_city(call):
     try:
         city = call.data.split("_", 1)[1]
-        city = weather_api.normalize_city_name(city)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         today = datetime.now()
@@ -1359,7 +1357,6 @@ def handle_chart_city(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
 def handle_forecast_city(call):
     city = call.data.split("_", 1)[1]
-    city = weather_api.normalize_city_name(city)
     try:
         city = call.data.split("_", 1)[1]
         settings = data_manager.get_user_settings(call.message.chat.id)
@@ -1393,8 +1390,7 @@ def show_forecast_options(msg):
     # Новый UX: сначала выбор города, потом даты
     markup = types.InlineKeyboardMarkup(row_width=2)
     for city in saved_cities:
-        norm_city = weather_api.normalize_city_name(city)
-        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{norm_city}"))
+        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
     safe_send_message(
         msg.chat.id,
@@ -1407,7 +1403,6 @@ def handle_forecast_date(call):
     _, city, date_str = call.data.split("_", 2)
     settings = data_manager.get_user_settings(call.message.chat.id)
     lang = settings['language']
-    city = weather_api.normalize_city_name(city)
     send_forecast_for_date(call.message.chat.id, city, lang, date_str)
     bot.answer_callback_query(call.id)
 
@@ -1575,11 +1570,10 @@ def request_new_city(call):
         )
 
         msg = bot.send_message(
-            call.message.chat.id,
-            f"{LANGUAGES[lang]['enter_city']}\n\n"
-            f"{LANGUAGES[lang]['or_text']} {LANGUAGES[lang]['enter_city_manual']}",
-            reply_markup=markup
-        )
+        call.message.chat.id,
+        LANGUAGES[lang]['enter_city'],
+        reply_markup=markup
+    )
         bot.register_next_step_handler(msg, process_new_city)
 
     except Exception as e:
@@ -1593,22 +1587,27 @@ def process_new_city(msg, city=None):
 
         # --- Определяем название города ---
         if city:
-            city_name = weather_api.normalize_city_name(city)
-        else:
-            if not msg.text or len(msg.text.strip()) > 100:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-                send_main_menu(msg.chat.id, lang)  # <--- главное меню после ошибки
-                return
-
-            city_name = msg.text.strip()
-            weather_data = get_cached_weather(city_name, lang, weather_api.get_current_weather)
-            if not weather_data:
+            weather_data = get_cached_weather(city, lang, weather_api.get_current_weather)
+            if not weather_data or 'name' not in weather_data:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                 send_main_menu(msg.chat.id, lang)
                 return
-            city_name = weather_api.normalize_city_name(weather_data['name'])
+            city_name = weather_data['name']
+        else:
+            if not msg.text or len(msg.text.strip()) > 100:
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                send_main_menu(msg.chat.id, lang)
+                return
 
-        # --- Проверка лимита городов ---
+            raw_city = msg.text.strip()
+            weather_data = get_cached_weather(raw_city, lang, weather_api.get_current_weather)
+            if not weather_data or 'name' not in weather_data:
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                send_main_menu(msg.chat.id, lang)
+                return
+            city_name = weather_data['name']
+
+        # --- Лимит городов ---
         if len(saved_cities) >= 5:
             safe_send_message(
                 msg.chat.id,
