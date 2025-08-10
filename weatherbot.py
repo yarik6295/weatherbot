@@ -617,32 +617,30 @@ class WeatherAPI:
                 'appid': self.api_key,
                 'units': 'metric',
                 'lang': lang,
-                'cnt': 40  # Получаем больше точек данных
+                'cnt': 40  # Получаем 40 точек данных (5 дней)
             }
             response = requests.get(
-                f"{self.base_url}/forecast", 
-                params=params, 
-                timeout=15,
-                verify=True
+                f"{self.base_url}/forecast",
+                params=params,
+                timeout=15
             )
             
+            # Проверяем статус ответа
             if response.status_code != 200:
-                logger.error(f"Forecast API Error: {response.status_code} - {response.text}")
+                logger.error(f"API Error: {response.status_code} - {response.text}")
                 return None
-                
+            
             data = response.json()
             
+            # Проверяем структуру ответа
             if not isinstance(data, dict) or 'list' not in data:
-                logger.error(f"Invalid forecast data structure: {data}")
+                logger.error(f"Invalid API response: {data}")
                 return None
                 
             return data
             
-        except requests.RequestException as e:
-            logger.error(f"Error fetching forecast: {e}")
-            return None
-        except ValueError as e:
-            logger.error(f"API JSON decode error: {e}")
+        except Exception as e:
+            logger.error(f"Forecast request failed: {e}")
             return None
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
@@ -826,21 +824,21 @@ def get_cached_weather(city, lang, api_func):
     global _cache_cleanup_counter
     now = time.time()
     key = (city.lower(), lang)
+    
     with _weather_cache_lock:
         entry = _weather_cache.get(key)
         if entry and now - entry['ts'] < WEATHER_CACHE_TTL:
+            logger.debug(f"Using cached data for {city}")
             return entry['data']
-        _cache_cleanup_counter += 1
-        if _cache_cleanup_counter % 500 == 0:
-            # Удаляем устаревшие элементы
-            for k in list(_weather_cache.keys()):
-                if now - _weather_cache[k]['ts'] > WEATHER_CACHE_TTL:
-                    del _weather_cache[k]
+            
+    # Запрашиваем новые данные
     data = api_func(city, lang)
+    logger.debug(f"API response for {city}: {data}")
+    
     with _weather_cache_lock:
         _weather_cache[key] = {'data': data, 'ts': now}
+        
     return data
-
 
 def generate_utc_timezone_keyboard(lang="ru"):
     offsets = [
