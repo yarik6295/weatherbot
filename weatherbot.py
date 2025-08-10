@@ -574,12 +574,11 @@ class DataManager:
 class WeatherAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_urls = [
-            "https://api.openweathermap.org/data/2.5",
-            "https://pro.openweathermap.org/data/2.5"  # fallback
-        ]
+        self.base_url = "https://api.openweathermap.org/data/2.5"  # Основной URL
+        self.backup_url = "https://pro.openweathermap.org/data/2.5"  # Резервный URL
         self.timeout = 10
         self.max_retries = 2
+        self.session = requests.Session()  
     
     def normalize_city_name(self, city: str) -> str:
         """Нормализация названия города для избежания дубликатов"""
@@ -616,35 +615,39 @@ class WeatherAPI:
             logger.error(f"API JSON decode error: {e}")
             return None
 
-    def _make_request(self, base_url, city, lang):
-        params = {
-            'q': city,
-            'appid': self.api_key,
-            'units': 'metric',
-            'lang': lang
-        }
+    def _make_request(self, url: str, params: dict) -> Optional[Dict]:
         try:
-            response = requests.get(
-                f"{base_url}/forecast",
+            response = self.session.get(
+                url,
                 params=params,
                 timeout=self.timeout,
                 headers={'User-Agent': 'WeatherBot/2.0'}
             )
-            if response.status_code == 200:
-                return response.json()
-            logger.error(f"API Error {response.status_code}: {response.text}")
-        except Exception as e:
-            logger.error(f"Request failed: {str(e)}")
-        return None
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed to {url}: {str(e)}")
+            return None
 
     def get_forecast(self, city: str, lang: str = 'en') -> Optional[Dict]:
-        for base_url in self.base_urls:
-            for attempt in range(self.max_retries):
-                data = self._make_request(base_url, city, lang)
-                if data:
-                    return data
-                time.sleep(1)
-        return None
+        params = {
+            'q': city,
+            'appid': self.api_key,
+            'units': 'metric',
+            'lang': lang,
+            'cnt': 40
+        }
+
+        # Пробуем основной URL
+        data = self._make_request(f"{self.base_url}/forecast", params)
+        if data:
+            return data
+
+        # Если основной не сработал, пробуем резервный
+        logger.warning("Trying backup API URL")
+        data = self._make_request(f"{self.backup_url}/forecast", params)
+        return data
+
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
         """Генерирует погодные предупреждения на основе текущих условий"""
@@ -1722,70 +1725,64 @@ def process_new_city(msg, city=None):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
-        saved_cities = settings.get('saved_cities', [])
-
-        # --- Определяем название города ---
+        
+        # Получаем данные через API
         if city:
-            weather_data = get_cached_weather(city, lang, weather_api.get_current_weather)
-            if not weather_data or 'name' not in weather_data:
+            # Для геолокации сначала получаем город по координатам
+            location = geolocator.reverse((city.latitude, city.longitude), exactly_one=True)
+            if location:
+                address = location.raw.get('address', {})
+                city_name = address.get('city') or address.get('town') or address.get('village')
+                if not city_name:
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                    return
+                weather_data = weather_api.get_forecast(city_name, lang)
+            else:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-                send_main_menu(msg.chat.id, lang)
                 return
-            city_name = weather_data['name']
         else:
-            if not msg.text or len(msg.text.strip()) > 100:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-                send_main_menu(msg.chat.id, lang)
-                return
-
+            # Для текстового ввода
             raw_city = msg.text.strip()
-            weather_data = get_cached_weather(raw_city, lang, weather_api.get_current_weather)
-            if not weather_data or 'name' not in weather_data:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-                send_main_menu(msg.chat.id, lang)
-                return
-            city_name = weather_data['name']
+            weather_data = weather_api.get_forecast(raw_city, lang)
 
-        # --- Лимит городов ---
-        if len(saved_cities) >= 5:
-            safe_send_message(
-                msg.chat.id,
-                LANGUAGES[lang]['max_cities']
-            )
-            send_main_menu(msg.chat.id, lang)
+        # Проверяем полученные данные
+        if not weather_data or 'name' not in weather_data:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
             return
 
-        # --- Добавление города ---
+        city_name = weather_data['name']
+        saved_cities = settings.get('saved_cities', [])
+
+        # Ограничение на количество городов
+        if len(saved_cities) >= 5:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
+            return
+
+        # Добавляем город, если его еще нет
         if city_name not in saved_cities:
             saved_cities.append(city_name)
             data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-            if len(saved_cities) == 1:
+            if len(saved_cities) == 1:  # Первый город - делаем его городом для уведомлений
                 data_manager.update_user_setting(msg.chat.id, 'notification_city', city_name)
 
             safe_send_message(
                 msg.chat.id,
-                LANGUAGES[lang]['city_added'].format(city=city_name),
-                reply_markup=types.ReplyKeyboardRemove()
+                LANGUAGES[lang]['city_added'].format(city=city_name)
             )
             send_current_weather(msg.chat.id, city_name, lang)
-            send_main_menu(msg.chat.id, lang)
         else:
             safe_send_message(
                 msg.chat.id,
-                f"⚠️ {city_name} уже есть в вашем списке",
-                reply_markup=types.ReplyKeyboardRemove()
+                f"ℹ️ {city_name} уже есть в вашем списке"
             )
             send_current_weather(msg.chat.id, city_name, lang)
-            send_main_menu(msg.chat.id, lang)
 
     except Exception as e:
-        logger.error(f"Error in process_new_city: {e}")
+        logger.error(f"Error in process_new_city: {e}", exc_info=True)
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['error'].format(error="Ошибка добавления города")
+            LANGUAGES[lang]['error'].format(error="Ошибка обработки города")
         )
-        send_main_menu(msg.chat.id, lang)
-
 
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
