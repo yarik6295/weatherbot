@@ -1413,7 +1413,6 @@ def handle_chart_date(call):
         _, city, date_str = call.data.split("_", 2)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        city = weather_api.normalize_city_name(city)
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
 
         # ВАЖНО: проверяем наличие forecast_data и forecast_data['list']!
