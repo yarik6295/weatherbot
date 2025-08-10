@@ -617,7 +617,7 @@ class WeatherAPI:
                 'appid': self.api_key,
                 'units': 'metric',
                 'lang': lang,
-                'cnt': 40  # Получаем 40 точек данных (5 дней)
+                'cnt': 40
             }
             response = requests.get(
                 f"{self.base_url}/forecast",
@@ -625,22 +625,32 @@ class WeatherAPI:
                 timeout=15
             )
             
-            # Проверяем статус ответа
-            if response.status_code != 200:
-                logger.error(f"API Error: {response.status_code} - {response.text}")
-                return None
+            # Добавляем детальное логирование
+            logger.debug(f"API Response: Status={response.status_code}, Body={response.text[:200]}...")
             
+            if response.status_code != 200:
+                logger.error(f"API Error {response.status_code}: {response.text}")
+                return None
+                
             data = response.json()
             
             # Проверяем структуру ответа
-            if not isinstance(data, dict) or 'list' not in data:
-                logger.error(f"Invalid API response: {data}")
+            if not isinstance(data, dict):
+                logger.error("API returned non-dict response")
+                return None
+                
+            if 'cod' in data and data['cod'] != 200:
+                logger.error(f"API error: {data.get('message', 'Unknown error')}")
+                return None
+                
+            if 'list' not in data:
+                logger.error("API response missing 'list' key")
                 return None
                 
             return data
             
         except Exception as e:
-            logger.error(f"Forecast request failed: {e}")
+            logger.error(f"Forecast request failed: {str(e)}", exc_info=True)
             return None
     
     def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
@@ -737,6 +747,13 @@ class ChartGenerator:
         matplotlib.use('Agg')
         plt.ioff()
         try:
+            if not forecast_data or not isinstance(forecast_data, dict):
+                logger.error("Invalid forecast data format")
+                return None
+                
+            if 'list' not in forecast_data or not isinstance(forecast_data['list'], list):
+                logger.error("Missing or invalid 'list' in forecast data")
+                return None
             if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
                 return None
                 
@@ -826,14 +843,18 @@ def get_cached_weather(city, lang, api_func):
     key = (city.lower(), lang)
     
     with _weather_cache_lock:
+        # Проверяем, есть ли валидные данные в кэше
         entry = _weather_cache.get(key)
-        if entry and now - entry['ts'] < WEATHER_CACHE_TTL:
-            logger.debug(f"Using cached data for {city}")
-            return entry['data']
+        if entry:
+            if now - entry['ts'] < WEATHER_CACHE_TTL:
+                if entry['data'] is not None:  # ← Добавляем проверку на None
+                    logger.debug(f"Using cached data for {city}")
+                    return entry['data']
+            del _weather_cache[key]  # Удаляем просроченные записи
             
-    # Запрашиваем новые данные
+    # Получаем новые данные
     data = api_func(city, lang)
-    logger.debug(f"API response for {city}: {data}")
+    logger.debug(f"New API data for {city}: {str(data)[:200]}...")
     
     with _weather_cache_lock:
         _weather_cache[key] = {'data': data, 'ts': now}
@@ -1429,6 +1450,21 @@ def handle_forecast_date(call):
 def handle_chart_date(call):
     try:
         _, city, date_str = call.data.split("_", 2)
+        if not city or not date_str or len(city) > 100:
+            raise ValueError("Invalid city or date format")
+            
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        
+        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
+        
+        # Полная проверка данных
+        if not forecast_data:
+            raise ValueError("No forecast data received")
+            
+        if 'list' not in forecast_data:
+            logger.error(f"Invalid forecast structure: {forecast_data.keys()}")
+            raise ValueError("Invalid forecast structure")
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         
