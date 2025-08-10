@@ -229,6 +229,18 @@ LANGUAGES = {
         'wind_info': "💨 Ветер: {speed} м/с {direction} (порывы до {gust} м/с)",
         'now': "*Сейчас:*",
         'in_city': "в {city}",
+        'city_not_found_try_english': "⚠️ Город не найден. Попробуйте написать название города на английском языке",
+        'error_getting_city_data': "⚠️ Ошибка получения данных о городе",
+        'location_city_not_found': "⚠️ Не удалось определить город по координатам",
+        'location_error': "⚠️ Ошибка определения местоположения",
+        'invalid_data_format': "⚠️ Неверный формат данных",
+        'city_added_success': "✅ Город {city} добавлен",
+        'city_already_exists': "ℹ️ {city} уже есть в списке",
+        'general_error': "⚠️ Произошла ошибка. Попробуйте позже",
+        'rate_limit_message': "⚠️ Подождите немного перед следующим запросом",
+        'city_name_too_long': "⚠️ лишком длинное название города",
+        'invalid_city_chars': "⚠️ Недопустимые символы в названии города",
+        'weather_not_found': "⚠️ Не удалось получить погоду для этого места",
         
     },
     'en': {
@@ -348,6 +360,19 @@ LANGUAGES = {
         'wind_info': "💨 Wind: {speed} m/s {direction} (gusts to {gust} m/s)",
         'now': "*Now:*",
         'in_city': "in {city}",
+        'city_not_found_try_english': "⚠️ City not found. Try entering the city name in English",
+        'error_getting_city_data': "⚠️ Error getting city data",
+        'location_city_not_found': "⚠️ Could not determine city from coordinates",
+        'location_error': "⚠️ Error determining location",
+        'invalid_data_format': "⚠️ Invalid data format",
+        'city_added_success': "✅ City {city} added",
+        'city_already_exists': "ℹ️ {city} is already in the list",
+        'general_error': "⚠️ An error occurred. Please try again later",
+        'rate_limit_message': "⚠️ Please wait a moment before the next request",
+        'city_name_too_long': "⚠️ City name is too long",
+        'invalid_city_chars': "⚠️ Invalid characters in city name",
+        'weather_not_found': "⚠️ Could not get weather for this location",
+        
     },
     'uk': {
         'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
@@ -466,6 +491,18 @@ LANGUAGES = {
         'wind_info': "💨 Вітер: {speed} м/с {direction} (пориви до {gust} м/с)",
         'now': "*Зараз:*",
         'in_city': "в {city}",
+        'city_not_found_try_english': "⚠️ Місто не знайдено. Спробуйте ввести назву міста англійською",
+        'error_getting_city_data': "⚠️ Помилка отримання даних про місто",
+        'location_city_not_found': "⚠️ Не вдалося визначити місто за координатами",
+        'location_error': "⚠️ Помилка визначення місцезнаходження",
+        'invalid_data_format': "⚠️ Неправильний формат даних",
+        'city_added_success': "✅ Місто {city} додано",
+        'city_already_exists': "ℹ️ {city} вже є в списку",
+        'general_error': "⚠️ Сталася помилка. Спробуйте пізніше",
+        'rate_limit_message': "⚠️ Зачекайте трохи перед наступним запитом",
+        'city_name_too_long': "⚠️ Занадто довга назва міста",
+        'invalid_city_chars': "⚠️ Недопустимі символи в назві міста",
+        'weather_not_found': "⚠️ Не вдалося отримати погоду для цього місця",
     
     }
 }
@@ -474,57 +511,43 @@ import logging
 # -- Data Management --
 class DataManager:
     def __init__(self, MONGO_CONNECTION_STRING: str, db_name: str, collection_name: str):
-        try:
-            # Очищаем URI от лишних символов
-            MONGO_CONNECTION_STRING = MONGO_CONNECTION_STRING.strip()
+        # Добавляем connection pooling
+        self.client = MongoClient(
+            MONGO_CONNECTION_STRING,
+            serverSelectionTimeoutMS=5000,
+            maxPoolSize=50,
+            waitQueueTimeoutMS=2500,
+            tls=True,
+            tlsAllowInvalidCertificates=False
+        )
+        
+        # Добавляем индексы для ускорения запросов
+        self.collection.create_index([("chat_id", 1)], unique=True)
+        self.collection.create_index([("last_activity", 1)])
+        
+    def get_user_settings(self, chat_id: int) -> dict:
+        # Добавляем кэширование частых запросов
+        cache_key = f"user_settings_{chat_id}"
+        cached_settings = self._get_from_cache(cache_key)
+        if cached_settings:
+            return cached_settings
             
-            # Проверяем, что URI начинается с mongodb
-            if not MONGO_CONNECTION_STRING.startswith("mongodb"):
-                raise ValueError("Invalid MongoDB URI format")
-            
-            if "retryWrites=true" not in MONGO_CONNECTION_STRING and "w=majority" not in MONGO_CONNECTION_STRING:
-                if "?" in MONGO_CONNECTION_STRING:
-                    MONGO_CONNECTION_STRING += "&retryWrites=true&w=majority"
-                else:
-                    MONGO_CONNECTION_STRING += "?retryWrites=true&w=majority"
-            
-            logger.info(f"Connecting to MongoDB with URI: {MONGO_CONNECTION_STRING.split('@')[0]}...")
-            
-            self.client = MongoClient(
-                MONGO_CONNECTION_STRING,
-                serverSelectionTimeoutMS=5000,
-                tls=True,  # Используем tls вместо ssl
-                tlsAllowInvalidCertificates=False
-            )
-            
-            # Проверка подключения
-            self.client.admin.command('ping')
-            self.db = self.client[db_name]
-            self.collection = self.db[collection_name]
-            logger.info("✅ MongoDB подключение успешно!")
-            
-        except Exception as e:
-            logger.error(f"❌ FATAL ERROR: MongoDB connection failed - {str(e)}")
-            raise SystemExit(1)
-    def connect(self, MONGO_CONNECTION_STRING: str, db_name: str, collection_name: str):
-        try:
-            if "retryWrites=true" not in MONGO_CONNECTION_STRING.lower():
-                MONGO_CONNECTION_STRING += "?retryWrites=true&w=majority"
-            
-            self.client = MongoClient(
-                MONGO_CONNECTION_STRING,
-                serverSelectionTimeoutMS=5000,
-                ssl=True,
-                ssl_cert_reqs=ssl.CERT_REQUIRED
-            )
-            self.client.admin.command('ping')  # Проверка подключения
-            self.db = self.client[db_name]
-            self.collection = self.db[collection_name]
-            self.collection.create_index("chat_id", unique=True)
-        except Exception as e:
-            logger.error(f"MongoDB connection failed: {e}")
-            raise
-
+        # Оптимизируем запрос, выбирая только нужные поля
+        doc = self.collection.find_one(
+            {"chat_id": chat_id},
+            projection={
+                "language": 1,
+                "notifications": 1,
+                "notification_time": 1,
+                "saved_cities": 1,
+                "timezone": 1
+            }
+        )
+        
+        # Кэшируем результат
+        self._set_to_cache(cache_key, doc, ttl=300)
+        return doc
+    
     def reconnect(self):
         try:
             self.client.admin.command('ping')
@@ -574,11 +597,12 @@ class DataManager:
 class WeatherAPI:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = "https://api.openweathermap.org/data/2.5"  # Основной URL
-        self.backup_url = "https://pro.openweathermap.org/data/2.5"  # Резервный URL
-        self.timeout = 10
-        self.max_retries = 2
-        self.session = requests.Session()  
+        self.session = requests.Session()
+        self.session.mount('https://', requests.adapters.HTTPAdapter(
+            max_retries=3,
+            pool_connections=100,
+            pool_maxsize=100
+        ))
     
     def normalize_city_name(self, city: str) -> str:
         """Нормализация названия города для избежания дубликатов"""
@@ -750,86 +774,48 @@ class ChartGenerator:
             logger.error(f"Error creating chart: {e}")
             return None
     @staticmethod
-    def create_temperature_chart(forecast_data: Dict, city: str, lang: str) -> io.BytesIO:
+    def create_temperature_chart(forecast_data: Dict, city: str, lang: str) -> Optional[io.BytesIO]:
         try:
-            if not forecast_data:
-                logger.error("Empty forecast data")
+            if not forecast_data or 'list' not in forecast_data:
                 return None
                 
-            if not isinstance(forecast_data, dict):
-                logger.error(f"Invalid forecast data type: {type(forecast_data)}")
-                return None
-                
-            if 'list' not in forecast_data:
-                logger.error(f"No 'list' in forecast data. Keys: {forecast_data.keys()}")
-                return None
-                
-            if not forecast_data['list']:
-                logger.error("Empty forecast list")
-                return None
+            # Используем оптимизированные настройки matplotlib
+            plt.style.use('fast')
+            fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
             
-            matplotlib.use('Agg')
-            plt.ioff()
-            try:
-                if not forecast_data or not isinstance(forecast_data, dict):
-                    logger.error("Invalid forecast data format")
-                    return None
-                    
-                if 'list' not in forecast_data or not isinstance(forecast_data['list'], list):
-                    logger.error("Missing or invalid 'list' in forecast data")
-                    return None
-                if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
-                    return None
-                    
-                # Добавьте проверку данных:
-                required_keys = ['dt', 'main', 'weather']
-                if not all(key in item for item in forecast_data['list'] for key in required_keys):
-                    return None
-                # Используем только стандартный шрифт, чтобы не было предупреждений
-                plt.rcParams['font.family'] = ['DejaVu Sans']
-                
-                plt.style.use('dark_background')
-                fig, ax = plt.subplots(figsize=(12, 6))
-                
-                times = []
-                temps = []
-                
-                for item in forecast_data['list'][:24]:  # 24 часа
-                    dt = datetime.fromtimestamp(item['dt'])
-                    times.append(dt)
-                    temps.append(item['main']['temp'])
-                
-                ax.plot(times, temps, color='#00D4FF', linewidth=3, marker='o', markersize=4)
-                ax.fill_between(times, temps, alpha=0.3, color='#00D4FF')
-                
-                # Убираем эмодзи из заголовка
-                ax.set_title(f'Temperature Chart - {city}', fontsize=16, color='white', pad=20)
-                ax.set_xlabel('Time', fontsize=12, color='white')
-                ax.set_ylabel('Temperature (°C)', fontsize=12, color='white')
-                
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-                ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-                plt.xticks(rotation=45, fontsize=8)
-                
-                ax.grid(True, alpha=0.3)
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                
-                plt.tight_layout()
-                
-                buffer = io.BytesIO()
-                plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
-                        facecolor='#1a1a1a', edgecolor='none')
-                plt.close(fig)
-                gc.collect()
-                buffer.seek(0)
-                
-                return buffer
-            except Exception as e:
-                logger.error(f"Error creating chart: {e}")
-                return None
+            # Предварительно собираем все данные
+            data = [(datetime.fromtimestamp(item['dt']), item['main']['temp'])
+                    for item in forecast_data['list'][:24]]
+            times, temps = zip(*data)
+            
+            # Оптимизируем отрисовку
+            ax.plot(times, temps, color='#00D4FF', linewidth=2)
+            ax.fill_between(times, temps, alpha=0.2, color='#00D4FF')
+            
+            # Оптимизация подписей
+            ax.set_title(f'Temperature Chart - {city}')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('°C')
+            
+            # Оптимизация форматирования дат
+            locator = mdates.AutoDateLocator(minticks=6, maxticks=8)
+            formatter = mdates.DateFormatter('%H:%M')
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(formatter)
+            
+            # Оптимизация сохранения
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format='png', dpi=100, 
+                       bbox_inches='tight', 
+                       pad_inches=0.1,
+                       optimize=True)
+            plt.close(fig)
+            buffer.seek(0)
+            
+            return buffer
+            
         except Exception as e:
-            logger.error(f"Error creating chart: {e}")
+            logger.error(f"Chart generation error: {e}")
             return None
 
 class BackupWeatherSource:
@@ -845,33 +831,25 @@ class BackupWeatherSource:
         except:
             return None
 
-    def _convert_format(self, data):
-        # Конвертация формата другого API в нужный формат
-        return {
-            'list': [
-                {
-                    'dt': item['time_epoch'],
-                    'main': {
-                        'temp': item['temp_c'],
-                        'feels_like': item['feelslike_c']
-                    },
-                    'weather': [{
-                        'description': item['condition']['text']
-                    }]
-                } for item in data['forecast']['forecastday'][0]['hour']
-            ]
-        }
-
 # Инициализация DataManager с MongoDB
 data_manager = DataManager(MONGO_CONNECTION_STRING, MONGO_DB_NAME, MONGO_COLLECTION)
 weather_api = WeatherAPI(OWM_API_KEY)
 
-_weather_cache = {}
-_weather_cache_lock = Lock()
 WEATHER_CACHE_TTL = 300  # 5 минут
 
 USER_RATE_LIMIT = 20  # сообщений в минуту
 _user_msg_times = defaultdict(list)
+
+def cleanup_resources():
+    """Периодическая очистка ресурсов"""
+    try:
+        gc.collect()
+        plt.close('all')
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
+
+# Запускать периодически
+schedule.every(30).minutes.do(cleanup_resources)
 
 def verify_environment():
     required_vars = {
@@ -945,16 +923,6 @@ def start_bot():
     # Запуск бота
     bot.polling()
 
-def test_api_connection():
-    test_cities = ["London", "Moscow", "Tokyo"]
-    for city in test_cities:
-        data = weather_api.get_forecast(city)
-        if data:
-            logger.info(f"API test passed for {city}")
-            return True
-        logger.warning(f"API test failed for {city}")
-    return False
-
 if __name__ == '__main__':
     if not test_api_connection():
         logger.critical("API connection test failed. Shutting down.")
@@ -979,28 +947,53 @@ def send_main_menu(chat_id, lang):
         reply_markup=create_main_keyboard(chat_id)
     )
 
-def get_cached_weather(city, lang, api_func):
-    global _cache_cleanup_counter
-    now = time.time()
-    key = (city.lower(), lang)
-    
-    with _weather_cache_lock:
-        # Проверяем, есть ли валидные данные в кэше
-        entry = _weather_cache.get(key)
-        if entry:
-            if now - entry['ts'] < WEATHER_CACHE_TTL:
-                if entry['data'] is not None:  # ← Добавляем проверку на None
-                    logger.debug(f"Using cached data for {city}")
-                    return entry['data']
-            del _weather_cache[key]  # Удаляем просроченные записи
-            
-    # Получаем новые данные
-    data = api_func(city, lang)
-    logger.debug(f"New API data for {city}: {str(data)[:200]}...")
-    
-    with _weather_cache_lock:
-        _weather_cache[key] = {'data': data, 'ts': now}
+class WeatherCache:
+    def __init__(self, ttl: int = 300):
+        self._cache = {}
+        self._lock = Lock()
+        self._ttl = ttl
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 60  # Очистка каждую минуту
         
+    def get(self, key: tuple) -> Optional[dict]:
+        now = time.time()
+        with self._lock:
+            if now - self._last_cleanup > self._cleanup_interval:
+                self._cleanup()
+            
+            if key in self._cache:
+                data = self._cache[key]
+                if now - data['ts'] < self._ttl:
+                    return data['data']
+                del self._cache[key]
+        return None
+        
+    def set(self, key: tuple, value: dict):
+        with self._lock:
+            self._cache[key] = {
+                'data': value,
+                'ts': time.time()
+            }
+            
+    def _cleanup(self):
+        now = time.time()
+        expired = [k for k, v in self._cache.items() if now - v['ts'] > self._ttl]
+        for k in expired:
+            del self._cache[k]
+        self._last_cleanup = now
+
+# Использование
+weather_cache = WeatherCache()
+
+def get_cached_weather(city, lang, api_func):
+    key = (city.lower(), lang)
+    data = weather_cache.get(key)
+    if data:
+        return data
+        
+    data = api_func(city, lang)
+    if data:
+        weather_cache.set(key, data)
     return data
 
 def generate_utc_timezone_keyboard(lang="ru"):
@@ -1787,120 +1780,162 @@ def request_new_city(call):
         logger.error(f"Error in request_new_city: {e}")
 
 def process_new_city(msg, city=None):
+    """
+    Обрабатывает добавление нового города через текст или геолокацию
+    Args:
+        msg: сообщение от пользователя
+        city: название города или объект с координатами
+    """
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+        lang = settings.get('language', 'ru')
         
         if isinstance(city, str) or city is None:
             # Обработка текстового ввода
             if city is None:
                 if not msg.text or len(msg.text.strip()) > 100:
-                    safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                    safe_send_message(msg.chat.id, LANGUAGES[lang]['city_not_found_try_english'])
                     return
                 city_name = msg.text.strip()
             else:
                 city_name = city
 
-            # Запрашиваем погоду
             weather_data = weather_api.get_forecast(city_name, lang)
-            
-            if not weather_data or 'city' not in weather_data or 'name' not in weather_data['city']:
-                logger.error(f"Failed to get weather data for city: {city_name}")
+            if not weather_data or 'city' not in weather_data:
                 safe_send_message(
                     msg.chat.id, 
-                    "Город не найден. Попробуйте написать название города на английском языке"
+                    LANGUAGES[lang]['city_not_found_try_english'],
+                    reply_markup=types.ReplyKeyboardRemove()
                 )
                 return
 
-            final_city_name = weather_data['city']['name']
-            saved_cities = settings.get('saved_cities', [])
-
-            # Проверяем лимит городов
-            if len(saved_cities) >= 5:
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
+            final_city_name = weather_data['city'].get('name')
+            if not final_city_name:
+                safe_send_message(
+                    msg.chat.id, 
+                    LANGUAGES[lang]['error_getting_city_data'], 
+                    reply_markup=types.ReplyKeyboardRemove()
+                )
                 return
-
-            # Сохраняем город
-            if final_city_name not in saved_cities:
-                saved_cities.append(final_city_name)
-                data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-                
-                # Если это первый город, делаем его городом для уведомлений
-                if len(saved_cities) == 1:
-                    data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
-                
-                safe_send_message(
-                    msg.chat.id,
-                    LANGUAGES[lang]['city_added'].format(city=final_city_name),
-                    reply_markup=types.ReplyKeyboardRemove()
-                )
-            else:
-                safe_send_message(
-                    msg.chat.id,
-                    f"ℹ️ {final_city_name} уже есть в вашем списке",
-                    reply_markup=types.ReplyKeyboardRemove()
-                )
-
-            # Отправляем погоду и меню
-            send_current_weather(msg.chat.id, final_city_name, lang)
-            send_main_menu(msg.chat.id, lang)
 
         elif hasattr(city, 'latitude') and hasattr(city, 'longitude'):
             # Обработка геолокации
             try:
                 location = geolocator.reverse((city.latitude, city.longitude), exactly_one=True)
-                if not location:
-                    safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                if not location or not location.raw.get('address'):
+                    safe_send_message(
+                        msg.chat.id, 
+                        LANGUAGES[lang]['location_city_not_found']
+                    )
                     return
-                    
-                address = location.raw.get('address', {})
+
+                address = location.raw['address']
                 city_name = address.get('city') or address.get('town') or address.get('village')
-                
                 if not city_name:
-                    safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+                    safe_send_message(
+                        msg.chat.id, 
+                        LANGUAGES[lang]['location_city_not_found']
+                    )
                     return
-                    
-                # Рекурсивно вызываем обработку с найденным названием города
-                process_new_city(msg, city_name)
-                
-            except Exception as geo_error:
-                logger.error(f"Geolocation error: {geo_error}")
-                safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
+
+                weather_data = weather_api.get_forecast(city_name, lang)
+                if not weather_data or 'city' not in weather_data:
+                    safe_send_message(
+                        msg.chat.id, 
+                        LANGUAGES[lang]['weather_not_found']
+                    )
+                    return
+
+                final_city_name = weather_data['city'].get('name')
+                if not final_city_name:
+                    safe_send_message(
+                        msg.chat.id, 
+                        LANGUAGES[lang]['error_getting_city_data']
+                    )
+                    return
+
+            except Exception as e:
+                logger.error(f"Geolocation error: {e}")
+                safe_send_message(
+                    msg.chat.id, 
+                    LANGUAGES[lang]['location_error']
+                )
                 return
+        else:
+            safe_send_message(
+                msg.chat.id, 
+                LANGUAGES[lang]['invalid_data_format']
+            )
+            return
+
+        # Проверяем и сохраняем город
+        saved_cities = settings.get('saved_cities', [])
+        if len(saved_cities) >= 5:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
+            return
+
+        if final_city_name not in saved_cities:
+            saved_cities.append(final_city_name)
+            data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
+            
+            if len(saved_cities) == 1:
+                data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
+            
+            safe_send_message(
+                msg.chat.id,
+                LANGUAGES[lang]['city_added_success'].format(city=final_city_name),
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+        else:
+            safe_send_message(
+                msg.chat.id,
+                LANGUAGES[lang]['city_already_exists'].format(city=final_city_name),
+                reply_markup=types.ReplyKeyboardRemove()
+            )
+
+        # Отправляем погоду и возвращаем в главное меню
+        send_current_weather(msg.chat.id, final_city_name, lang)
+        send_main_menu(msg.chat.id, lang)
 
     except Exception as e:
         logger.error(f"Error in process_new_city: {e}")
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['error'].format(error="Ошибка обработки города"),
+            LANGUAGES[lang]['general_error'],
             reply_markup=types.ReplyKeyboardRemove()
         )
         send_main_menu(msg.chat.id, lang)
 
-@bot.message_handler(func=lambda m: True, content_types=['text'])
 def handle_text_message(msg):
+    """
+    Обрабатывает текстовые сообщения от пользователя
+    """
     try:
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings.get('language', 'ru')
+        
         if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['rate_limit_message'])
             return
             
         text = msg.text.strip()
-        
-        # Проверка на недопустимые символы
-        if not text or any(char in text for char in [';', '"', "'", '\\']):
-            safe_send_message(msg.chat.id, "Недопустимые символы в запросе")
+        if not text or len(text) > 100:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['city_name_too_long'])
             return
             
-        # Передаем текст в process_new_city
+        if any(char in text for char in [';', '"', "'", '\\', '/', '|']):
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_city_chars'])
+            return
+            
         process_new_city(msg)
             
     except Exception as e:
         logger.error(f"Error in handle_text_message: {e}")
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+        lang = settings.get('language', 'ru')
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['error'].format(error="Ошибка обработки сообщения"),
+            LANGUAGES[lang]['general_error'],
             reply_markup=types.ReplyKeyboardRemove()
         )
 
@@ -2478,16 +2513,6 @@ def webhook():
 @app.route("/", methods=["GET"])
 def healthcheck():
     return "ok", 200
-
-def test_connections():
-    try:
-        data_manager.client.admin.command('ping')
-        print("✅ MongoDB connection successful")
-    except Exception as e:
-        print(f"❌ MongoDB failed: {e}")
-
-    test_weather = weather_api.get_current_weather("London", "en")
-    print(f"🌤️ Weather test: {'✅' if test_weather else '❌'}")
 
 if __name__ == '__main__':
     logger.info("🚀 Starting WeatherBot 2.0...")
