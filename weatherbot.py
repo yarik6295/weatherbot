@@ -620,7 +620,8 @@ class WeatherAPI:
             }
             response = requests.get(f"{self.base_url}/forecast", params=params, timeout=15)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            return data if isinstance(data, dict) and 'list' in data else None
         except requests.RequestException as e:
             logger.error(f"Error fetching forecast: {e}")
             return None
@@ -1413,20 +1414,31 @@ def handle_chart_date(call):
         _, city, date_str = call.data.split("_", 2)
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
+        
+        # Получаем данные и логируем их
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
-
-        # ВАЖНО: проверяем наличие forecast_data и forecast_data['list']!
-        if not forecast_data or not isinstance(forecast_data, dict) or 'list' not in forecast_data or not forecast_data['list']:
+        logger.info(f"Forecast data for {city}: {forecast_data}")
+        
+        # Проверяем данные
+        if not forecast_data or not isinstance(forecast_data, dict) or 'list' not in forecast_data:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
 
-        filtered = {'list': [item for item in forecast_data['list'] if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str]}
+        # Фильтруем данные по дате
+        filtered = {
+            'list': [
+                item for item in forecast_data['list'] 
+                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+            ]
+        }
+        
         if not filtered['list']:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
 
+        # Создаем график
         chart_buffer = ChartGenerator.create_temperature_chart(filtered, city, lang)
         if chart_buffer:
             bot.send_photo(
@@ -1435,11 +1447,12 @@ def handle_chart_date(call):
                 caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
             )
         else:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Chart generation failed"))
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Ошибка создания графика"))
+        
         bot.answer_callback_query(call.id)
+
     except Exception as e:
         logger.error(f"Error in handle_chart_date: {e}")
-        lang = data_manager.get_user_settings(call.message.chat.id)['language']
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))
         bot.answer_callback_query(call.id)
 
