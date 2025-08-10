@@ -1306,6 +1306,7 @@ def set_notification_city(call):
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in set_notification_city: {e}")
+        
 @bot.message_handler(content_types=['location'])
 def handle_location(msg):
     try:
@@ -1750,11 +1751,10 @@ def process_new_city(msg, city=None):
             return
 
         # Проверяем полученные данные
-        if not weather_data or 'name' not in weather_data:
+        if not weather_data or 'city' not in weather_data or 'name' not in weather_data['city']:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
             return
-
-        final_city_name = weather_data['name']
+        final_city_name = weather_data['city']['name']
         saved_cities = settings.get('saved_cities', [])
 
         # Ограничение на количество городов
