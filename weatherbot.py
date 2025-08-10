@@ -1787,39 +1787,69 @@ def request_new_city(call):
         logger.error(f"Error in request_new_city: {e}")
 
 def process_new_city(msg, city=None):
-    """
-    Обрабатывает добавление нового города через текст или геолокацию
-    
-    Args:
-        msg: Объект сообщения Telegram
-        city: Строка с названием города или объект с координатами
-    """
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         
-        # Определяем тип ввода (текст или геолокация)
         if isinstance(city, str) or city is None:
             # Обработка текстового ввода
             if city is None:
                 if not msg.text or len(msg.text.strip()) > 100:
-                    logger.warning(f"Invalid city text input: {msg.text if msg.text else 'None'}")
                     safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                     return
                 city_name = msg.text.strip()
             else:
                 city_name = city
 
-            logger.info(f"Processing city by name: {city_name}")
+            # Запрашиваем погоду
             weather_data = weather_api.get_forecast(city_name, lang)
             
+            if not weather_data or 'city' not in weather_data or 'name' not in weather_data['city']:
+                logger.error(f"Failed to get weather data for city: {city_name}")
+                safe_send_message(
+                    msg.chat.id, 
+                    "Город не найден. Попробуйте написать название города на английском языке"
+                )
+                return
+
+            final_city_name = weather_data['city']['name']
+            saved_cities = settings.get('saved_cities', [])
+
+            # Проверяем лимит городов
+            if len(saved_cities) >= 5:
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
+                return
+
+            # Сохраняем город
+            if final_city_name not in saved_cities:
+                saved_cities.append(final_city_name)
+                data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
+                
+                # Если это первый город, делаем его городом для уведомлений
+                if len(saved_cities) == 1:
+                    data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
+                
+                safe_send_message(
+                    msg.chat.id,
+                    LANGUAGES[lang]['city_added'].format(city=final_city_name),
+                    reply_markup=types.ReplyKeyboardRemove()
+                )
+            else:
+                safe_send_message(
+                    msg.chat.id,
+                    f"ℹ️ {final_city_name} уже есть в вашем списке",
+                    reply_markup=types.ReplyKeyboardRemove()
+                )
+
+            # Отправляем погоду и меню
+            send_current_weather(msg.chat.id, final_city_name, lang)
+            send_main_menu(msg.chat.id, lang)
+
         elif hasattr(city, 'latitude') and hasattr(city, 'longitude'):
             # Обработка геолокации
-            logger.info(f"Processing city by coordinates: {city.latitude}, {city.longitude}")
             try:
                 location = geolocator.reverse((city.latitude, city.longitude), exactly_one=True)
                 if not location:
-                    logger.error("Geolocation reverse lookup failed")
                     safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                     return
                     
@@ -1827,85 +1857,52 @@ def process_new_city(msg, city=None):
                 city_name = address.get('city') or address.get('town') or address.get('village')
                 
                 if not city_name:
-                    logger.error(f"No city found in address data: {address}")
                     safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                     return
                     
-                logger.info(f"Found city name from coordinates: {city_name}")
-                weather_data = weather_api.get_forecast(city_name, lang)
+                # Рекурсивно вызываем обработку с найденным названием города
+                process_new_city(msg, city_name)
                 
             except Exception as geo_error:
                 logger.error(f"Geolocation error: {geo_error}")
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
                 return
-        else:
-            logger.error(f"Invalid city input type: {type(city)}")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-            return
-
-        # Проверка данных погоды
-        if not weather_data:
-            logger.error(f"No weather data received for {city_name}")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-            return
-
-        if 'city' not in weather_data:
-            logger.error(f"No 'city' in weather data. Keys: {weather_data.keys()}")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-            return
-
-        if 'name' not in weather_data['city']:
-            logger.error(f"No 'name' in city data. City keys: {weather_data['city'].keys()}")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['not_found'])
-            return
-
-        final_city_name = weather_data['city']['name']
-        saved_cities = settings.get('saved_cities', [])
-
-        # Проверка лимита городов
-        if len(saved_cities) >= 5:
-            logger.info(f"Max cities limit reached for user {msg.chat.id}")
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
-            return
-
-        # Добавление города
-        if final_city_name not in saved_cities:
-            saved_cities.append(final_city_name)
-            data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
-            
-            # Если это первый город, делаем его городом для уведомлений
-            if len(saved_cities) == 1:
-                data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
-            
-            logger.info(f"Added new city {final_city_name} for user {msg.chat.id}")
-            safe_send_message(
-                msg.chat.id,
-                LANGUAGES[lang]['city_added'].format(city=final_city_name),
-                reply_markup=types.ReplyKeyboardRemove()
-            )
-        else:
-            logger.info(f"City {final_city_name} already exists for user {msg.chat.id}")
-            safe_send_message(
-                msg.chat.id,
-                f"ℹ️ {final_city_name} уже есть в вашем списке",
-                reply_markup=types.ReplyKeyboardRemove()
-            )
-
-        # Отправляем текущую погоду и меню
-        send_current_weather(msg.chat.id, final_city_name, lang)
-        send_main_menu(msg.chat.id, lang)
 
     except Exception as e:
-        logger.error(f"Error in process_new_city: {str(e)}", exc_info=True)
-        try:
-            safe_send_message(
-                msg.chat.id,
-                LANGUAGES[lang]['error'].format(error="Ошибка обработки города"),
-                reply_markup=types.ReplyKeyboardRemove()
-            )
-            send_main_menu(msg.chat.id, lang)
-        except:
-            logger.error("Failed to send error message to user", exc_info=True)
+        logger.error(f"Error in process_new_city: {e}")
+        safe_send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['error'].format(error="Ошибка обработки города"),
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        send_main_menu(msg.chat.id, lang)
+
+@bot.message_handler(func=lambda m: True, content_types=['text'])
+def handle_text_message(msg):
+    try:
+        if not check_rate_limit(msg.chat.id):
+            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            return
+            
+        text = msg.text.strip()
+        
+        # Проверка на недопустимые символы
+        if not text or any(char in text for char in [';', '"', "'", '\\']):
+            safe_send_message(msg.chat.id, "Недопустимые символы в запросе")
+            return
+            
+        # Передаем текст в process_new_city
+        process_new_city(msg)
+            
+    except Exception as e:
+        logger.error(f"Error in handle_text_message: {e}")
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings['language']
+        safe_send_message(
+            msg.chat.id,
+            LANGUAGES[lang]['error'].format(error="Ошибка обработки сообщения"),
+            reply_markup=types.ReplyKeyboardRemove()
+        )
 
 @bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(msg):
@@ -2095,23 +2092,6 @@ def set_utc_timezone(call):
         logger.error(f"Error in set_utc_timezone: {e}")
         bot.answer_callback_query(call.id, "❌ Ошибка")    
 
-
-@bot.message_handler(func=lambda m: True, content_types=['text'])
-def handle_text_message(msg):
-    try:
-        if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
-            return
-            
-        text = msg.text.strip()
-        if not text or any(char in text for char in [';', '"', "'", '\\']):
-            safe_send_message(msg.chat.id, "Недопустимые символы в запросе")
-            return
-            
-        process_new_city(msg, city=text)
-            
-    except Exception as e:
-        logger.error(f"Error in handle_text_message: {e}")
 
 def send_current_weather(chat_id, city, lang, lat=None, lon=None):
     try:
