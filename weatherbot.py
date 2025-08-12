@@ -1946,52 +1946,48 @@ def handle_text(message):
             reply_markup=types.ReplyKeyboardRemove()
         )
 
-@bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['settings_button'] for lang in LANGUAGES))
+@bot.message_handler(func=lambda m: m.text and m.text == "⚙️ Настройки")
 def show_settings(msg):
+    logger.info(f"Settings button pressed. Text: {msg.text}")
     try:
-        # Добавим логирование для отладки
-        logger.info(f"Settings handler triggered. Message text: '{msg.text}'")
-        logger.info(f"Available settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
-        
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
             return
 
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+        lang = settings.get('language', 'ru')
         saved_cities = settings.get('saved_cities', [])
 
-        # Создаем клавиатуру с настройками
-        markup = types.InlineKeyboardMarkup()
+        markup = types.InlineKeyboardMarkup(row_width=2)
         
-        # Основные кнопки настроек
-        buttons = [
-            (LANGUAGES[lang]['notifications_tab'], "notifications_settings"),
-            (LANGUAGES[lang]['language_tab'], "language_settings"),
-            (LANGUAGES[lang]['timezone_button'], "timezone_settings")
-        ]
+        # Добавляем основные кнопки настроек
+        markup.add(
+            types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], 
+                                     callback_data="notifications_settings"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], 
+                                     callback_data="language_settings")
+        )
         
-        # Добавляем кнопки по две в ряд
-        for i in range(0, len(buttons), 2):
-            row_buttons = [types.InlineKeyboardButton(text, callback_data=data) 
-                         for text, data in buttons[i:i+2]]
-            markup.row(*row_buttons)
-        
-        # Если есть сохраненные города, добавляем кнопку управления городами
-        if saved_cities:
-            markup.add(types.InlineKeyboardButton(
-                LANGUAGES[lang]['saved_cities_title'],
-                callback_data="show_saved_cities_settings"
-            ))
-        
-        # Кнопка "Назад"
-        markup.add(types.InlineKeyboardButton(
-            LANGUAGES[lang]['back_button'],
-            callback_data="back_to_main"
-        ))
+        markup.add(
+            types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], 
+                                     callback_data="timezone_settings")
+        )
 
-        # Формируем текст сообщения
-        message_text = LANGUAGES[lang]['settings_menu'].format(
+        # Добавляем кнопку управления городами, если они есть
+        if saved_cities:
+            markup.add(
+                types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'],
+                                         callback_data="show_saved_cities_settings")
+            )
+
+        # Добавляем кнопку "Назад"
+        markup.add(
+            types.InlineKeyboardButton(LANGUAGES[lang]['back_button'],
+                                     callback_data="back_to_main")
+        )
+
+        # Формируем текст настроек
+        settings_text = LANGUAGES[lang]['settings_menu'].format(
             notifications="вкл" if settings.get('notifications', False) else "выкл",
             time=settings.get('notification_time', '--:--'),
             lang=lang.upper(),
@@ -1999,14 +1995,12 @@ def show_settings(msg):
             timezone=settings.get('timezone', 'UTC')
         )
 
-        logger.info(f"Sending settings message to user {msg.chat.id}")
-        
         # Отправляем сообщение с настройками
         bot.send_message(
-            msg.chat.id,
-            message_text,
-            parse_mode="Markdown",
-            reply_markup=markup
+            chat_id=msg.chat.id,
+            text=settings_text,
+            reply_markup=markup,
+            parse_mode="Markdown"
         )
 
     except Exception as e:
