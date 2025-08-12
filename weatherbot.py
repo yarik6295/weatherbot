@@ -805,48 +805,88 @@ class ChartGenerator:
             logger.error(f"Error creating chart: {e}")
             return None
     @staticmethod
-    def create_temperature_chart(forecast_data: Dict, city: str, lang: str) -> Optional[io.BytesIO]:
+    def create_temperature_precipitation_chart(forecast_data, city, lang):
         try:
-            if not forecast_data or 'list' not in forecast_data:
+            # Проверяем входные данные
+            if not forecast_data:
+                logger.error("Empty forecast_data")
                 return None
                 
-            # Используем оптимизированные настройки matplotlib
-            plt.style.use('fast')
-            fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
+            if not isinstance(forecast_data, dict):
+                logger.error(f"Invalid forecast_data type: {type(forecast_data)}")
+                return None
+                
+            if 'list' not in forecast_data:
+                logger.error(f"Missing 'list' key in forecast_data. Keys: {list(forecast_data.keys())}")
+                return None
+                
+            if not forecast_data['list']:
+                logger.error("Empty forecast list")
+                return None
+
+            logger.info(f"Creating chart for {city} with {len(forecast_data['list'])} data points")
+
+            plt.style.use('dark_background')
+            fig, ax1 = plt.subplots(figsize=(12, 6))
             
-            # Предварительно собираем все данные
-            data = [(datetime.fromtimestamp(item['dt']), item['main']['temp'])
-                    for item in forecast_data['list'][:24]]
-            times, temps = zip(*data)
+            times = []
+            temps = []
+            precip = []
             
-            # Оптимизируем отрисовку
-            ax.plot(times, temps, color='#00D4FF', linewidth=2)
-            ax.fill_between(times, temps, alpha=0.2, color='#00D4FF')
+            # Обрабатываем данные прогноза
+            for item in forecast_data['list'][:24]:  # берем первые 24 часа
+                try:
+                    dt = datetime.fromtimestamp(item['dt'])
+                    temp = item['main']['temp']
+                    rain = item.get('rain', {}).get('3h', 0)
+                    snow = item.get('snow', {}).get('3h', 0)
+                    
+                    times.append(dt)
+                    temps.append(temp)
+                    precip.append(rain + snow)
+                    
+                except KeyError as e:
+                    logger.error(f"Missing key in forecast item: {e}")
+                    continue
+                    
+            if not times:
+                logger.error("No valid data points collected")
+                return None
+                
+            logger.info(f"Collected {len(times)} valid data points")
             
-            # Оптимизация подписей
-            ax.set_title(f'Temperature Chart - {city}')
-            ax.set_xlabel('Time')
-            ax.set_ylabel('°C')
+            # График температуры
+            ax1.plot(times, temps, color='#FFA500', linewidth=2, label='Температура')
+            ax1.set_ylabel('Температура (°C)', color='#FFA500')
+            ax1.tick_params(axis='y', colors='#FFA500')
             
-            # Оптимизация форматирования дат
-            locator = mdates.AutoDateLocator(minticks=6, maxticks=8)
-            formatter = mdates.DateFormatter('%H:%M')
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(formatter)
+            # График осадков
+            ax2 = ax1.twinx()
+            ax2.bar(times, precip, color='#1E90FF', alpha=0.5, width=0.05, label='Осадки')
+            ax2.set_ylabel('Осадки (мм)', color='#1E90FF')
+            ax2.tick_params(axis='y', colors='#1E90FF')
             
-            # Оптимизация сохранения
+            # Настройка внешнего вида
+            ax1.set_title(f'{LANGUAGES[lang]["precipitation_chart"]} - {city}')
+            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+            
+            plt.xticks(rotation=45, fontsize=8)
+            plt.tight_layout()
+            
+            # Сохраняем график
             buffer = io.BytesIO()
-            fig.savefig(buffer, format='png', dpi=100, 
-                       bbox_inches='tight', 
-                       pad_inches=0.1,
-                       optimize=True)
+            plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
             plt.close(fig)
+            gc.collect()
             buffer.seek(0)
             
+            logger.info("Chart created successfully")
             return buffer
             
         except Exception as e:
-            logger.error(f"Chart generation error: {e}")
+            logger.error(f"Error creating chart: {e}")
+            logger.exception("Full traceback:")
             return None
 
 class BackupWeatherSource:
@@ -2152,6 +2192,7 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
     try:
         current_data = get_cached_weather(city, lang, weather_api.get_current_weather)
         if not current_data:
+            logger.error(f"No current weather data for city: {city}")
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
 
@@ -2184,16 +2225,33 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
             f"{uv_info}"
         )
         
+        # Отправляем основное сообщение с погодой
         safe_send_message(chat_id, message, parse_mode="Markdown")
         
+        # Получаем данные прогноза для графика
+        logger.info(f"Requesting forecast data for chart: {city}")
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
-        if forecast_data:
+        
+        if forecast_data and isinstance(forecast_data, dict) and 'list' in forecast_data and forecast_data['list']:
+            logger.info(f"Creating precipitation chart for {city}")
             chart_buffer = ChartGenerator.create_temperature_precipitation_chart(forecast_data, city, lang)
             if chart_buffer:
-                bot.send_photo(chat_id, chart_buffer, caption=LANGUAGES[lang]['precipitation_chart'])
+                try:
+                    bot.send_photo(chat_id, chart_buffer, caption=LANGUAGES[lang]['precipitation_chart'])
+                except Exception as e:
+                    logger.error(f"Failed to send chart: {e}")
+            else:
+                logger.error("Failed to create chart buffer")
+        else:
+            logger.error(f"Invalid forecast data for chart. Data: {forecast_data if forecast_data else 'None'}")
         
+    except KeyError as e:
+        logger.error(f"Missing key in weather data: {e}")
+        safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error="Data error"))
     except Exception as e:
         logger.error(f"Error in send_current_weather: {e}")
+        logger.exception("Full traceback:")
+        safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
 
 def get_uv_index(lat, lon, lang='en'):
     """Получает UV-индекс по координатам с переводом"""
