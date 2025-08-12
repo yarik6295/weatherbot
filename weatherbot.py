@@ -761,9 +761,6 @@ class WeatherAPI:
 class ChartGenerator:
     @staticmethod
     def create_temperature_chart(forecast_data: Dict, city: str, lang: str) -> Optional[io.BytesIO]:
-        """
-        Создает график только температуры (используется при выборе даты)
-        """
         try:
             if not forecast_data or 'list' not in forecast_data:
                 logger.error("Invalid forecast data structure")
@@ -772,7 +769,6 @@ class ChartGenerator:
             plt.style.use('fast')
             fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
             
-            # Только температура, без осадков
             data = [(datetime.fromtimestamp(item['dt']), item['main']['temp'])
                     for item in forecast_data['list'][:24]]
             times, temps = zip(*data)
@@ -780,22 +776,21 @@ class ChartGenerator:
             ax.plot(times, temps, color='#00D4FF', linewidth=2)
             ax.fill_between(times, temps, alpha=0.2, color='#00D4FF')
             
-            # Упрощенное оформление
             ax.set_title(f'Temperature Chart - {city}')
             ax.set_xlabel('Time')
             ax.set_ylabel('°C')
             
-            # Форматирование времени
             locator = mdates.AutoDateLocator(minticks=6, maxticks=8)
             formatter = mdates.DateFormatter('%H:%M')
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(formatter)
             
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            
             buffer = io.BytesIO()
-            fig.savefig(buffer, format='png', dpi=100, 
-                       bbox_inches='tight', 
-                       pad_inches=0.1,
-                       optimize=True)
+            # Убрали параметр optimize
+            fig.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
             plt.close(fig)
             buffer.seek(0)
             
@@ -807,10 +802,6 @@ class ChartGenerator:
 
     @staticmethod
     def create_temperature_precipitation_chart(forecast_data, city, lang):
-        """
-        Создает комбинированный график температуры и осадков 
-        (используется при показе текущей погоды)
-        """
         try:
             if not forecast_data or 'list' not in forecast_data:
                 logger.error("Invalid forecast data structure")
@@ -819,7 +810,6 @@ class ChartGenerator:
             plt.style.use('dark_background')
             fig, ax1 = plt.subplots(figsize=(12, 6))
             
-            # Данные температуры и осадков
             times = []
             temps = []
             precip = []
@@ -832,12 +822,10 @@ class ChartGenerator:
                 snow = item.get('snow', {}).get('3h', 0)
                 precip.append(rain + snow)
             
-            # График температуры
             ax1.plot(times, temps, color='#FFA500', linewidth=2, label='Температура')
             ax1.set_ylabel('Температура (°C)', color='#FFA500')
             ax1.tick_params(axis='y', colors='#FFA500')
             
-            # График осадков
             ax2 = ax1.twinx()
             ax2.bar(times, precip, color='#1E90FF', alpha=0.5, width=0.05, label='Осадки')
             ax2.set_ylabel('Осадки (мм)', color='#1E90FF')
@@ -851,7 +839,8 @@ class ChartGenerator:
             plt.tight_layout()
             
             buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', dpi=150)
+            # Убрали лишние параметры
+            fig.savefig(buffer, format='png', dpi=150)
             plt.close(fig)
             gc.collect()
             buffer.seek(0)
@@ -860,6 +849,7 @@ class ChartGenerator:
         except Exception as e:
             logger.error(f"Error creating chart: {e}")
             return None
+        
 class BackupWeatherSource:
     def get_forecast(self, city: str, lang: str) -> Optional[Dict]:
         try:
@@ -1955,15 +1945,20 @@ def handle_text(message):
             LANGUAGES[lang]['general_error'],
             reply_markup=types.ReplyKeyboardRemove()
         )
-@bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
+
+@bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES.keys()])
 def show_settings(msg):
     try:
+        logger.info(f"Showing settings for user {msg.chat.id}")
+        
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
             return
 
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
+        logger.info(f"Got settings: {settings}")
+        
+        lang = settings.get('language', 'ru')
         saved_cities = settings.get('saved_cities', [])
 
         markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1979,27 +1974,45 @@ def show_settings(msg):
         
         if saved_cities:
             markup.add(
-                types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['saved_cities_title'], 
+                    callback_data="show_saved_cities_settings"
+                )
             )
 
-        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_main"))
+        markup.add(
+            types.InlineKeyboardButton(
+                LANGUAGES[lang]['back_button'], 
+                callback_data="back_to_main"
+            )
+        )
 
+        message_text = LANGUAGES[lang]['settings_menu'].format(
+            notifications="вкл" if settings.get('notifications') else "выкл",
+            time=settings.get('notification_time', '--:--'),
+            lang=lang.upper(),
+            cities=len(saved_cities),
+            timezone=settings.get('timezone', 'UTC')
+        )
+
+        logger.info(f"Sending settings message to {msg.chat.id}: {message_text[:100]}...")
+        
         safe_send_message(
             msg.chat.id,
-            LANGUAGES[lang]['settings_menu'].format(
-                notifications="вкл" if settings.get('notifications') else "выкл",
-                time=settings.get('notification_time', '--:--'),
-                lang=lang.upper(),
-                cities=len(saved_cities),
-                timezone=settings.get('timezone', 'UTC')
-            ),
+            message_text,
             parse_mode="Markdown",
             reply_markup=markup
         )
 
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
-        safe_send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
+        logger.exception("Full traceback:")
+        try:
+            settings = data_manager.get_user_settings(msg.chat.id)
+            lang = settings.get('language', 'ru')
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['general_error'])
+        except:
+            safe_send_message(msg.chat.id, "⚠️ Error loading settings")
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
