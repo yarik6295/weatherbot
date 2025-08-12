@@ -152,7 +152,7 @@ LANGUAGES = {
         'clear_cities_button': "🗑️ Очистить города",
         'city_added': "✅ Город {city} добавлен",
         'city_removed': "🗑️ Город {city} удален",
-        'max_cities': "⚠️ Максимум 5 городов",
+        'max_cities': "⚠️ Максимум 15 сохраненных городов",
         'saved_cities': "🌆 Мои города:",
         'no_saved_cities': "📍 Нет сохраненных городов",
         'add_city': "➕ Добавить город",
@@ -283,7 +283,7 @@ LANGUAGES = {
         'clear_cities_button': "🗑️ Clear cities",
         'city_added': "✅ City {city} added",
         'city_removed': "🗑️ City {city} removed",
-        'max_cities': "⚠️ Maximum 5 cities",
+        'max_cities': "⚠️ Maximum 15 saved cities",
         'saved_cities': "🏙️ *Saved Cities:*",
         'no_saved_cities': "📍 No saved cities",
         'add_city': "➕ Add city",
@@ -414,7 +414,7 @@ LANGUAGES = {
         'clear_cities_button': "🗑️ Очистити міста",
         'city_added': "✅ Місто {city} додано",
         'city_removed': "🗑️ Місто {city} видалено",
-        'max_cities': "⚠️ Максимум 5 міст",
+        'max_cities': "⚠️ Максимум 15 збережених міст",
         'saved_cities': "🏙️ *Збережені міста:*",
         'no_saved_cities': "📍 Немає збережених міст",
         'add_city': "➕ Додати місто",
@@ -1828,7 +1828,7 @@ def request_new_city(call):
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
 
-        if len(settings.get('saved_cities', [])) >= 5:
+        if len(settings.get('saved_cities', [])) >= 15:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['max_cities'])
             return
 
@@ -1924,7 +1924,7 @@ def process_new_city(msg, city=None):
 
         # Проверяем и сохраняем город
         saved_cities = settings.get('saved_cities', [])
-        if len(saved_cities) >= 5:
+        if len(saved_cities) >= 15:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
             return
 
@@ -2189,69 +2189,110 @@ def set_utc_timezone(call):
 
 
 def send_current_weather(chat_id, city, lang, lat=None, lon=None):
+    """
+    Отправляет текущую погоду и график прогноза для указанного города
+    
+    Args:
+        chat_id (int): ID чата пользователя
+        city (str): Название города
+        lang (str): Код языка (ru/en/uk)
+        lat (float, optional): Широта для UV индекса
+        lon (float, optional): Долгота для UV индекса
+    """
     try:
-        current_data = get_cached_weather(city, lang, weather_api.get_current_weather)
-        if not current_data:
-            logger.error(f"No current weather data for city: {city}")
+        logger.info(f"Getting weather data for {city}")
+        
+        # 1. Получаем текущую погоду
+        current_weather = weather_api.get_current_weather(city, lang)
+        if not current_weather:
+            logger.error(f"Failed to get current weather for {city}")
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
 
-        temp = round(current_data['main']['temp'])
-        feels_like = round(current_data['main']['feels_like'])
-        description = current_data['weather'][0]['description'].title()
-        icon = get_weather_icon(current_data['weather'][0]['description'])
-
-        wind_speed = current_data['wind']['speed']
-        wind_gust = current_data['wind'].get('gust', wind_speed)
-        wind_dir = get_wind_direction(current_data['wind'].get('deg'), lang)
-
-        sunrise = datetime.fromtimestamp(current_data['sys']['sunrise']).strftime('%H:%M')
-        sunset = datetime.fromtimestamp(current_data['sys']['sunset']).strftime('%H:%M')
-
-        uv_info = ""
-        if lat and lon:
-            uv, risk = get_uv_index(lat, lon)
-            if uv is not None:
-                uv_info = "\n" + LANGUAGES[lang]['uv_index'].format(uv=uv, risk=risk)
+        # 2. Формируем основное сообщение с текущей погодой
+        try:
+            # Температура
+            temp = round(current_weather['main']['temp'])
+            feels_like = round(current_weather['main']['feels_like'])
+            
+            # Описание погоды
+            description = current_weather['weather'][0]['description'].title()
+            icon = get_weather_icon(current_weather['weather'][0]['description'])
+            
+            # Ветер
+            wind_speed = current_weather['wind']['speed']
+            wind_gust = current_weather['wind'].get('gust', wind_speed)
+            wind_dir = get_wind_direction(current_weather['wind'].get('deg'), lang)
+            
+            # Восход/закат
+            sunrise = datetime.fromtimestamp(current_weather['sys']['sunrise']).strftime('%H:%M')
+            sunset = datetime.fromtimestamp(current_weather['sys']['sunset']).strftime('%H:%M')
+            
+            # UV индекс (если доступны координаты)
+            uv_info = ""
+            if lat and lon:
+                uv, risk = get_uv_index(lat, lon, lang)
+                if uv is not None:
+                    uv_info = "\n" + LANGUAGES[lang]['uv_index'].format(uv=uv, risk=risk)
+            
+            # Формируем сообщение
+            message = (
+                f"{icon} {LANGUAGES[lang]['in_city'].format(city=city)}\n"
+                f"🌡️ {temp}°C {LANGUAGES[lang]['feels_like'].format(feels=feels_like)}\n"
+                f"{description}\n\n"
+                f"{LANGUAGES[lang]['wind_info'].format(speed=wind_speed, direction=wind_dir, gust=wind_gust)}\n"
+                f"{LANGUAGES[lang]['humidity'].format(humidity=current_weather['main']['humidity'])}\n"
+                f"{LANGUAGES[lang]['pressure'].format(pressure=current_weather['main']['pressure'])}\n"
+                f"{LANGUAGES[lang]['sun_info'].format(sunrise=sunrise, sunset=sunset)}"
+                f"{uv_info}"
+            )
+            
+            # Отправляем основное сообщение
+            safe_send_message(chat_id, message, parse_mode="Markdown")
+            
+        except KeyError as e:
+            logger.error(f"Missing key in current weather data: {e}")
+            safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error="Data structure error"))
+            return
+            
+        # 3. Получаем данные прогноза для графика
+        logger.info(f"Getting forecast data for {city}")
+        forecast_data = weather_api.get_forecast(city, lang)
         
-        message = (
-            f"{icon} {LANGUAGES[lang]['in_city'].format(city=city)}\n"
-            f"🌡️ {temp}°C {LANGUAGES[lang]['feels_like'].format(feels=feels_like)}\n"
-            f"{description}\n\n"
-            f"{LANGUAGES[lang]['wind_info'].format(speed=wind_speed, direction=wind_dir, gust=wind_gust)}\n"
-            f"{LANGUAGES[lang]['humidity'].format(humidity=current_data['main']['humidity'])}\n"
-            f"{LANGUAGES[lang]['pressure'].format(pressure=current_data['main']['pressure'])}\n"
-            f"{LANGUAGES[lang]['sun_info'].format(sunrise=sunrise, sunset=sunset)}"
-            f"{uv_info}"
-        )
-        
-        # Отправляем основное сообщение с погодой
-        safe_send_message(chat_id, message, parse_mode="Markdown")
-        
-        # Получаем данные прогноза для графика
-        logger.info(f"Requesting forecast data for chart: {city}")
-        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
-        
-        if forecast_data and isinstance(forecast_data, dict) and 'list' in forecast_data and forecast_data['list']:
-            logger.info(f"Creating precipitation chart for {city}")
+        if not forecast_data or 'list' not in forecast_data:
+            logger.error(f"Invalid forecast data structure: {list(forecast_data.keys()) if forecast_data else 'None'}")
+            return
+            
+        # 4. Создаем и отправляем график
+        try:
+            logger.info("Creating temperature chart")
             chart_buffer = ChartGenerator.create_temperature_precipitation_chart(forecast_data, city, lang)
+            
             if chart_buffer:
-                try:
-                    bot.send_photo(chat_id, chart_buffer, caption=LANGUAGES[lang]['precipitation_chart'])
-                except Exception as e:
-                    logger.error(f"Failed to send chart: {e}")
+                bot.send_photo(
+                    chat_id, 
+                    chart_buffer, 
+                    caption=LANGUAGES[lang]['precipitation_chart'],
+                    reply_markup=create_main_keyboard(chat_id)  # Возвращаем основную клавиатуру
+                )
+                logger.info("Chart sent successfully")
             else:
                 logger.error("Failed to create chart buffer")
-        else:
-            logger.error(f"Invalid forecast data for chart. Data: {forecast_data if forecast_data else 'None'}")
-        
-    except KeyError as e:
-        logger.error(f"Missing key in weather data: {e}")
-        safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error="Data error"))
+                
+        except Exception as chart_error:
+            logger.error(f"Error creating/sending chart: {chart_error}")
+            logger.exception("Chart error details:")
+            # Продолжаем работу, так как основная информация уже отправлена
+            
     except Exception as e:
-        logger.error(f"Error in send_current_weather: {e}")
-        logger.exception("Full traceback:")
-        safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
+        logger.error(f"General error in send_current_weather: {e}")
+        logger.exception("Full error details:")
+        safe_send_message(
+            chat_id, 
+            LANGUAGES[lang]['error'].format(error="Internal error"),
+            reply_markup=create_main_keyboard(chat_id)
+        )
+
 
 def get_uv_index(lat, lon, lang='en'):
     """Получает UV-индекс по координатам с переводом"""
