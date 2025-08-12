@@ -760,11 +760,66 @@ class WeatherAPI:
 # -- Chart Generator --
 class ChartGenerator:
     @staticmethod
-    def create_temperature_precipitation_chart(forecast_data, city, lang):
+    def create_temperature_chart(forecast_data: Dict, city: str, lang: str) -> Optional[io.BytesIO]:
+        """
+        Создает график только температуры (используется при выборе даты)
+        """
         try:
+            if not forecast_data or 'list' not in forecast_data:
+                logger.error("Invalid forecast data structure")
+                return None
+                
+            plt.style.use('fast')
+            fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
+            
+            # Только температура, без осадков
+            data = [(datetime.fromtimestamp(item['dt']), item['main']['temp'])
+                    for item in forecast_data['list'][:24]]
+            times, temps = zip(*data)
+            
+            ax.plot(times, temps, color='#00D4FF', linewidth=2)
+            ax.fill_between(times, temps, alpha=0.2, color='#00D4FF')
+            
+            # Упрощенное оформление
+            ax.set_title(f'Temperature Chart - {city}')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('°C')
+            
+            # Форматирование времени
+            locator = mdates.AutoDateLocator(minticks=6, maxticks=8)
+            formatter = mdates.DateFormatter('%H:%M')
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(formatter)
+            
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format='png', dpi=100, 
+                       bbox_inches='tight', 
+                       pad_inches=0.1,
+                       optimize=True)
+            plt.close(fig)
+            buffer.seek(0)
+            
+            return buffer
+            
+        except Exception as e:
+            logger.error(f"Chart generation error: {e}")
+            return None
+
+    @staticmethod
+    def create_temperature_precipitation_chart(forecast_data, city, lang):
+        """
+        Создает комбинированный график температуры и осадков 
+        (используется при показе текущей погоды)
+        """
+        try:
+            if not forecast_data or 'list' not in forecast_data:
+                logger.error("Invalid forecast data structure")
+                return None
+
             plt.style.use('dark_background')
             fig, ax1 = plt.subplots(figsize=(12, 6))
             
+            # Данные температуры и осадков
             times = []
             temps = []
             precip = []
@@ -777,12 +832,12 @@ class ChartGenerator:
                 snow = item.get('snow', {}).get('3h', 0)
                 precip.append(rain + snow)
             
-            # Температура
+            # График температуры
             ax1.plot(times, temps, color='#FFA500', linewidth=2, label='Температура')
             ax1.set_ylabel('Температура (°C)', color='#FFA500')
             ax1.tick_params(axis='y', colors='#FFA500')
             
-            # Осадки
+            # График осадков
             ax2 = ax1.twinx()
             ax2.bar(times, precip, color='#1E90FF', alpha=0.5, width=0.05, label='Осадки')
             ax2.set_ylabel('Осадки (мм)', color='#1E90FF')
@@ -801,94 +856,10 @@ class ChartGenerator:
             gc.collect()
             buffer.seek(0)
             return buffer
-        except Exception as e:
-            logger.error(f"Error creating chart: {e}")
-            return None
-    @staticmethod
-    def create_temperature_precipitation_chart(forecast_data, city, lang):
-        try:
-            # Проверяем входные данные
-            if not forecast_data:
-                logger.error("Empty forecast_data")
-                return None
-                
-            if not isinstance(forecast_data, dict):
-                logger.error(f"Invalid forecast_data type: {type(forecast_data)}")
-                return None
-                
-            if 'list' not in forecast_data:
-                logger.error(f"Missing 'list' key in forecast_data. Keys: {list(forecast_data.keys())}")
-                return None
-                
-            if not forecast_data['list']:
-                logger.error("Empty forecast list")
-                return None
-
-            logger.info(f"Creating chart for {city} with {len(forecast_data['list'])} data points")
-
-            plt.style.use('dark_background')
-            fig, ax1 = plt.subplots(figsize=(12, 6))
-            
-            times = []
-            temps = []
-            precip = []
-            
-            # Обрабатываем данные прогноза
-            for item in forecast_data['list'][:24]:  # берем первые 24 часа
-                try:
-                    dt = datetime.fromtimestamp(item['dt'])
-                    temp = item['main']['temp']
-                    rain = item.get('rain', {}).get('3h', 0)
-                    snow = item.get('snow', {}).get('3h', 0)
-                    
-                    times.append(dt)
-                    temps.append(temp)
-                    precip.append(rain + snow)
-                    
-                except KeyError as e:
-                    logger.error(f"Missing key in forecast item: {e}")
-                    continue
-                    
-            if not times:
-                logger.error("No valid data points collected")
-                return None
-                
-            logger.info(f"Collected {len(times)} valid data points")
-            
-            # График температуры
-            ax1.plot(times, temps, color='#FFA500', linewidth=2, label='Температура')
-            ax1.set_ylabel('Температура (°C)', color='#FFA500')
-            ax1.tick_params(axis='y', colors='#FFA500')
-            
-            # График осадков
-            ax2 = ax1.twinx()
-            ax2.bar(times, precip, color='#1E90FF', alpha=0.5, width=0.05, label='Осадки')
-            ax2.set_ylabel('Осадки (мм)', color='#1E90FF')
-            ax2.tick_params(axis='y', colors='#1E90FF')
-            
-            # Настройка внешнего вида
-            ax1.set_title(f'{LANGUAGES[lang]["precipitation_chart"]} - {city}')
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-            ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-            
-            plt.xticks(rotation=45, fontsize=8)
-            plt.tight_layout()
-            
-            # Сохраняем график
-            buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
-            plt.close(fig)
-            gc.collect()
-            buffer.seek(0)
-            
-            logger.info("Chart created successfully")
-            return buffer
             
         except Exception as e:
             logger.error(f"Error creating chart: {e}")
-            logger.exception("Full traceback:")
             return None
-
 class BackupWeatherSource:
     def get_forecast(self, city: str, lang: str) -> Optional[Dict]:
         try:
@@ -1646,42 +1617,20 @@ def handle_forecast_date(call):
 def handle_chart_date(call):
     try:
         _, city, date_str = call.data.split("_", 2)
-        if not city or not date_str or len(city) > 100:
-            raise ValueError("Invalid city or date format")
-            
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         
-        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
+        logger.info(f"Getting forecast for chart: {city}, {date_str}")
+        forecast_data = weather_api.get_forecast(city, lang)
         
-        # Полная проверка данных
         if not forecast_data:
-            raise ValueError("No forecast data received")
-            
-        if 'list' not in forecast_data:
-            logger.error(f"Invalid forecast structure: {forecast_data.keys()}")
-            raise ValueError("Invalid forecast structure")
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        
-        # Получаем данные и логируем их
-        forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
-        
-        # Улучшенная проверка данных
-        if not forecast_data or not isinstance(forecast_data, dict):
-            logger.error(f"No valid forecast data for {city}")
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Нет данных прогноза"))
-            bot.answer_callback_query(call.id)
-            return
-
-        if 'list' not in forecast_data or not forecast_data['list']:
-            logger.error(f"No 'list' in forecast data for {city}: {forecast_data}")
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Нет данных для построения графика"))
+            logger.error("No forecast data received")
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
 
         # Фильтруем данные по дате
-        filtered = {
+        filtered_data = {
             'city': forecast_data.get('city', {}),
             'list': [
                 item for item in forecast_data['list'] 
@@ -1689,14 +1638,14 @@ def handle_chart_date(call):
             ]
         }
         
-        if not filtered['list']:
-            logger.error(f"No data for {city} on {date_str}")
+        if not filtered_data['list']:
+            logger.error(f"No data for date: {date_str}")
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             bot.answer_callback_query(call.id)
             return
 
         # Создаем график
-        chart_buffer = ChartGenerator.create_temperature_chart(filtered, city, lang)
+        chart_buffer = ChartGenerator.create_temperature_chart(filtered_data, city, lang)
         if chart_buffer:
             bot.send_photo(
                 call.message.chat.id,
@@ -1704,14 +1653,21 @@ def handle_chart_date(call):
                 caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
             )
         else:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Ошибка создания графика"))
-        
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Failed to create chart"))
+            
         bot.answer_callback_query(call.id)
 
     except Exception as e:
         logger.error(f"Error in handle_chart_date: {e}")
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))
-        bot.answer_callback_query(call.id)
+        logger.exception("Full traceback:")
+        try:
+            safe_send_message(
+                call.message.chat.id, 
+                LANGUAGES[settings['language']]['error'].format(error="Chart generation failed")
+            )
+            bot.answer_callback_query(call.id)
+        except:
+            pass
 
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
@@ -2005,36 +1961,30 @@ def show_settings(msg):
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
             return
+
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
 
         markup = types.InlineKeyboardMarkup(row_width=2)
         
-        # Основные кнопки настроек
-        buttons = [
+        # Кнопки настроек
+        markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], callback_data="notifications_settings"),
-            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings")
+        )
+        markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings")
-        ]
+        )
         
-        # Кнопка городов (если они есть)
         if saved_cities:
-            buttons.append(
-                types.InlineKeyboardButton(
-                    LANGUAGES[lang]['saved_cities_title'],
-                    callback_data="show_saved_cities_settings"
-                )
+            markup.add(
+                types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
             )
 
-        # Распределяем кнопки по 2 в ряд
-        for i in range(0, len(buttons), 2):
-            markup.add(*buttons[i:i+2])
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_main"))
 
-        # Кнопка "Назад"
-        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_menu"))
-
-        bot.send_message(
+        safe_send_message(
             msg.chat.id,
             LANGUAGES[lang]['settings_menu'].format(
                 notifications="вкл" if settings.get('notifications') else "выкл",
@@ -2049,7 +1999,8 @@ def show_settings(msg):
 
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
-        bot.send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
+        safe_send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
 def show_saved_cities_settings(call):
