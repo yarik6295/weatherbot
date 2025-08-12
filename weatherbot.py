@@ -1946,58 +1946,63 @@ def handle_text(message):
             reply_markup=types.ReplyKeyboardRemove()
         )
 
-@bot.message_handler(func=lambda m: m.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES.keys()])
+@bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['settings_button'] for lang in LANGUAGES))
 def show_settings(msg):
     try:
-        logger.info(f"Showing settings for user {msg.chat.id}")
+        # Добавим логирование для отладки
+        logger.info(f"Settings handler triggered. Message text: '{msg.text}'")
+        logger.info(f"Available settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
         
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
             return
 
         settings = data_manager.get_user_settings(msg.chat.id)
-        logger.info(f"Got settings: {settings}")
-        
-        lang = settings.get('language', 'ru')
+        lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
 
-        markup = types.InlineKeyboardMarkup(row_width=2)
+        # Создаем клавиатуру с настройками
+        markup = types.InlineKeyboardMarkup()
         
-        # Кнопки настроек
-        markup.add(
-            types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], callback_data="notifications_settings"),
-            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings")
-        )
-        markup.add(
-            types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings")
-        )
+        # Основные кнопки настроек
+        buttons = [
+            (LANGUAGES[lang]['notifications_tab'], "notifications_settings"),
+            (LANGUAGES[lang]['language_tab'], "language_settings"),
+            (LANGUAGES[lang]['timezone_button'], "timezone_settings")
+        ]
         
+        # Добавляем кнопки по две в ряд
+        for i in range(0, len(buttons), 2):
+            row_buttons = [types.InlineKeyboardButton(text, callback_data=data) 
+                         for text, data in buttons[i:i+2]]
+            markup.row(*row_buttons)
+        
+        # Если есть сохраненные города, добавляем кнопку управления городами
         if saved_cities:
-            markup.add(
-                types.InlineKeyboardButton(
-                    LANGUAGES[lang]['saved_cities_title'], 
-                    callback_data="show_saved_cities_settings"
-                )
-            )
+            markup.add(types.InlineKeyboardButton(
+                LANGUAGES[lang]['saved_cities_title'],
+                callback_data="show_saved_cities_settings"
+            ))
+        
+        # Кнопка "Назад"
+        markup.add(types.InlineKeyboardButton(
+            LANGUAGES[lang]['back_button'],
+            callback_data="back_to_main"
+        ))
 
-        markup.add(
-            types.InlineKeyboardButton(
-                LANGUAGES[lang]['back_button'], 
-                callback_data="back_to_main"
-            )
-        )
-
+        # Формируем текст сообщения
         message_text = LANGUAGES[lang]['settings_menu'].format(
-            notifications="вкл" if settings.get('notifications') else "выкл",
+            notifications="вкл" if settings.get('notifications', False) else "выкл",
             time=settings.get('notification_time', '--:--'),
             lang=lang.upper(),
             cities=len(saved_cities),
             timezone=settings.get('timezone', 'UTC')
         )
 
-        logger.info(f"Sending settings message to {msg.chat.id}: {message_text[:100]}...")
+        logger.info(f"Sending settings message to user {msg.chat.id}")
         
-        safe_send_message(
+        # Отправляем сообщение с настройками
+        bot.send_message(
             msg.chat.id,
             message_text,
             parse_mode="Markdown",
@@ -2007,13 +2012,15 @@ def show_settings(msg):
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
         logger.exception("Full traceback:")
-        try:
-            settings = data_manager.get_user_settings(msg.chat.id)
-            lang = settings.get('language', 'ru')
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['general_error'])
-        except:
-            safe_send_message(msg.chat.id, "⚠️ Error loading settings")
+        safe_send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
 
+@bot.message_handler(func=lambda m: m.text and '⚙️' in m.text)
+def debug_settings(msg):
+    logger.info(f"Debug: Settings-like message received: '{msg.text}'")
+    logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
+    # Проверяем, совпадает ли текст с каким-либо вариантом кнопки настроек
+    matches = [lang for lang in LANGUAGES if LANGUAGES[lang]['settings_button'] == msg.text]
+    logger.info(f"Matching languages: {matches}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
 def show_saved_cities_settings(call):
