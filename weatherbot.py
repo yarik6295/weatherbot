@@ -36,12 +36,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Затем в коде использовать разные уровни логирования:
-logger.debug("Подробная информация для отладки")
-logger.info("Информационное сообщение")
-logger.warning("Предупреждение")
-logger.error("Ошибка")
-
 
 def self_ping():
     url = os.environ.get("SELF_URL")
@@ -1516,15 +1510,30 @@ def handle_chart_date(call):
     settings = data_manager.get_user_settings(call.message.chat.id)
     lang = settings['language']
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    # Получить forecast_data, отфильтровать по дате, построить график
+    
     forecast_data = weather_api.get_forecast(city, lang)
-    filtered_data = {
-        'city': forecast_data.get('city', {}),
-        'list': [
-            item for item in forecast_data['list'] 
-            if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
-        ]
-    }
+    now = datetime.now()
+    selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+    if selected_date.date() == now.date():
+        # Для сегодня: точки с текущего времени до +24 часа
+        start_ts = now.timestamp()
+        end_ts = (now + timedelta(hours=24)).timestamp()
+        filtered_data = {
+            'city': forecast_data.get('city', {}),
+            'list': [
+                item for item in forecast_data['list']
+                if start_ts <= item['dt'] <= end_ts
+            ]
+        }
+    else:
+        # Для других дат: все точки за выбранный день
+        filtered_data = {
+            'city': forecast_data.get('city', {}),
+            'list': [
+                item for item in forecast_data['list'] 
+                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+            ]
+        }
     chart_buffer = ChartGenerator.create_weather_chart_for_day(filtered_data, city, lang, date_str)
     if chart_buffer:
         bot.send_photo(
