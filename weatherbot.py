@@ -795,19 +795,13 @@ class ChartGenerator:
             ax1.set_title(f'{LANGUAGES[lang]["precipitation_chart"]} - {city}')
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
-            
 
-            fig, ax = plt.subplots(figsize=(14, 7))
-
-            for label in ax.get_xticklabels():
+            for label in ax1.get_xticklabels():    # форматируем подписи на ax1!
                 label.set_rotation(45)
                 label.set_ha('right')
 
-            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             plt.tight_layout()
-            
             buffer = io.BytesIO()
-            # Убрали лишние параметры
             fig.savefig(buffer, format='jpeg', dpi=150)
             plt.close(fig)
             gc.collect()
