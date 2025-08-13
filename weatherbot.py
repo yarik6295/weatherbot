@@ -719,13 +719,28 @@ class ChartGenerator:
     @staticmethod
     def create_weather_chart_for_day(forecast_data, city, lang, date_str):
         try:
-            # Фильтрация точек только на выбранный день
-            day_points = [
-                item for item in forecast_data.get('list', [])
-                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
-            ]
+            # Получаем все точки прогноза (обычно 3-часовые интервалы)
+            all_points = forecast_data.get('list', [])
+            now = datetime.now()
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+            
+            # Фильтрация точек для следующих 24 часов
+            if selected_date.date() == now.date():
+                # Берём только точки от текущего времени (или ближайшей), до +24 часа
+                start_ts = now.timestamp()
+                end_ts = (now + timedelta(hours=24)).timestamp()
+                day_points = [
+                    item for item in all_points
+                    if start_ts <= item['dt'] <= end_ts
+                ]
+            else:
+                # Обычный режим: все точки в пределах выбранного дня
+                day_points = [
+                    item for item in all_points
+                    if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+                ]
             if not day_points:
-                logger.error("Нет данных для графика на выбранную дату")
+                logger.error("Нет данных для графика на выбранные 24 часа")
                 return None
 
             plt.style.use('dark_background')
@@ -755,7 +770,7 @@ class ChartGenerator:
             ax2.set_ylabel(ylabel_precip, color='#1E90FF')
             ax2.tick_params(axis='y', colors='#1E90FF')
 
-            ax1.set_title(f'{chart_title} - {city} ({date_str})')
+            ax1.set_title(f'{chart_title} - {city} ({date_str}{" +24ч" if selected_date.date() == now.date() else ""})')
             ax1.set_xlabel(xlabel)
 
             # Формат оси X
