@@ -714,49 +714,6 @@ class WeatherAPI:
             logger.error(f"Forecast request failed: {str(e)}")
             return None
 
-    
-    def get_weather_alerts(self, lat: float, lon: float, lang: str = 'en') -> List[str]:
-        """Генерирует погодные предупреждения на основе текущих условий"""
-        try:
-            current = self.get_current_weather_by_coords(lat, lon, lang)
-            if not current:
-                return []
-            alerts = []
-            temp = current['main']['temp']
-            wind_speed = current['wind']['speed']
-            visibility = current.get('visibility', 10000) / 1000  # км
-            # Температурные предупреждения
-            if temp > 35:
-                alerts.append(LANGUAGES[lang]['alert_hot'].format(icon=ALERT_ICONS['hot'], temp=temp))
-            elif temp < -20:
-                alerts.append(LANGUAGES[lang]['alert_cold'].format(icon=ALERT_ICONS['cold'], temp=temp))
-            # Ветер
-            if wind_speed > 15:
-                alerts.append(LANGUAGES[lang]['alert_wind'].format(icon=ALERT_ICONS['wind'], wind=wind_speed))
-            # Видимость
-            if visibility < 1:
-                alerts.append(LANGUAGES[lang]['alert_visibility'].format(visibility=visibility))
-            return alerts
-        except Exception as e:
-            logger.error(f"Error getting weather alerts: {e}")
-            return []
-    
-    def get_current_weather_by_coords(self, lat: float, lon: float, lang: str = 'en') -> Optional[Dict]:
-        try:
-            params = {
-                'lat': lat,
-                'lon': lon,
-                'appid': self.api_key,
-                'units': 'metric',
-                'lang': lang
-            }
-            response = requests.get(f"{self.base_url}/weather", params=params, timeout=15)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            logger.error(f"Error fetching weather by coords: {e}")
-            return None
-
 # -- Chart Generator --
 class ChartGenerator:
     @staticmethod
@@ -785,12 +742,12 @@ class ChartGenerator:
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(formatter)
             
-            plt.xticks(rotation=45)
+            plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             
             buffer = io.BytesIO()
             # Убрали параметр optimize
-            fig.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+            fig.savefig(buffer, format='jpeg', dpi=100, bbox_inches='tight')
             plt.close(fig)
             buffer.seek(0)
             
@@ -835,12 +792,12 @@ class ChartGenerator:
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             
-            plt.xticks(rotation=45, fontsize=8)
+            plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             
             buffer = io.BytesIO()
             # Убрали лишние параметры
-            fig.savefig(buffer, format='png', dpi=150)
+            fig.savefig(buffer, format='jpeg', dpi=150)
             plt.close(fig)
             gc.collect()
             buffer.seek(0)
@@ -848,19 +805,6 @@ class ChartGenerator:
             
         except Exception as e:
             logger.error(f"Error creating chart: {e}")
-            return None
-        
-class BackupWeatherSource:
-    def get_forecast(self, city: str, lang: str) -> Optional[Dict]:
-        try:
-            # Можно добавить fallback на другой API
-            response = requests.get(
-                f"https://api.weatherapi.com/v1/forecast.json?key=ВАШ_КЛЮЧ&q={city}&days=3",
-                timeout=10
-            )
-            if response.status_code == 200:
-                return self._convert_format(response.json())
-        except:
             return None
 
 # Инициализация DataManager с MongoDB
@@ -937,22 +881,15 @@ if not check_internet_connection():
     exit(1)
 
 def start_bot():
-    # Проверка подключения
     if not check_internet_connection():
         logger.critical("Нет интернет-соединения")
         return
 
-    # Проверка API
     test_data = weather_api.get_forecast("London")
     if not test_data:
-        logger.warning("Основной API недоступен, пробую резервный...")
-        weather_api.backup_source = BackupWeatherSource()
-        test_data = weather_api.backup_source.get_forecast("London", "en")
-        if not test_data:
-            logger.critical("Все источники недоступны")
-            return
+        logger.critical("Основной API недоступен, проверьте ключ и интернет.")
+        return
 
-    # Запуск бота
     bot.polling()
 
 if __name__ == '__main__':
@@ -1615,7 +1552,7 @@ def handle_chart_date(call):
     else:
         bot.send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Failed to create chart"))
     bot.answer_callback_query(call.id)
-    
+
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
