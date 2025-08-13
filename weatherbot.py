@@ -1916,46 +1916,6 @@ def process_new_city(msg, city=None):
         )
         send_main_menu(msg.chat.id, lang)
 
-@bot.message_handler(func=lambda message: True, content_types=['text'])
-def handle_text(message):
-    """Обработчик для текстовых сообщений (названий городов)"""
-    try:
-        if not check_rate_limit(message.chat.id):
-            safe_send_message(message.chat.id, "Подождите перед следующим запросом")
-            return
-            
-        settings = data_manager.get_user_settings(message.chat.id)
-        lang = settings.get('language', 'ru')
-        
-        # Игнорируем служебные сообщения (кнопки меню и т.д.)
-        menu_buttons = [
-            LANGUAGES[lang]['forecast_button'], 
-            LANGUAGES[lang]['chart_button'],
-            LANGUAGES[lang]['settings_button'],
-            LANGUAGES[lang]['share_button'],
-            LANGUAGES[lang]['send_location'],
-            LANGUAGES[lang]['back'],
-            LANGUAGES[lang]['main_menu']
-        ]
-        
-        if message.text in menu_buttons:
-            logger.debug(f"Ignoring menu button: {message.text}")
-            return
-            
-        logger.info(f"Processing text message: {message.text} from user {message.chat.id}")
-        # Обрабатываем название города
-        process_new_city(message)
-        
-    except Exception as e:
-        logger.error(f"Error handling text message: {e}")
-        settings = data_manager.get_user_settings(message.chat.id)
-        lang = settings.get('language', 'ru')
-        safe_send_message(
-            message.chat.id,
-            LANGUAGES[lang]['general_error'],
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-
 @bot.message_handler(func=lambda message: message.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(message):
     try:
@@ -2588,6 +2548,46 @@ def handle_unsupported_content(msg):
 
     except Exception as e:
         logger.error(f"Error in handle_unsupported_content: {e}")
+
+@bot.message_handler(func=lambda message: True, content_types=['text'])
+def handle_text(message):
+    """Обработчик для текстовых сообщений (названий городов)"""
+    try:
+        if not check_rate_limit(message.chat.id):
+            safe_send_message(message.chat.id, "Подождите перед следующим запросом")
+            return
+            
+        settings = data_manager.get_user_settings(message.chat.id)
+        lang = settings.get('language', 'ru')
+        
+        # Игнорируем служебные сообщения (кнопки меню и т.д.)
+        menu_buttons = [
+            LANGUAGES[lang]['forecast_button'], 
+            LANGUAGES[lang]['chart_button'],
+            LANGUAGES[lang]['settings_button'],
+            LANGUAGES[lang]['share_button'],
+            LANGUAGES[lang]['send_location'],
+            LANGUAGES[lang]['back'],
+            LANGUAGES[lang]['main_menu']
+        ]
+        
+        if message.text in menu_buttons:
+            logger.debug(f"Ignoring menu button: {message.text}")
+            return
+            
+        logger.info(f"Processing text message: {message.text} from user {message.chat.id}")
+        # Обрабатываем название города
+        process_new_city(message)
+        
+    except Exception as e:
+        logger.error(f"Error handling text message: {e}")
+        settings = data_manager.get_user_settings(message.chat.id)
+        lang = settings.get('language', 'ru')
+        safe_send_message(
+            message.chat.id,
+            LANGUAGES[lang]['general_error'],
+            reply_markup=types.ReplyKeyboardRemove()
+        )
 
 @bot.message_handler(func=lambda message: True)
 def debug_log_all_messages(message):
