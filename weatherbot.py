@@ -1959,7 +1959,9 @@ def handle_text(message):
 @bot.message_handler(func=lambda message: message.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(message):
     try:
-        logger.info(f"Settings handler triggered with text: '{message.text}'")
+        # Добавим отладочный вывод
+        logger.info(f"Received text: '{message.text}'")
+        logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
         
         if not check_rate_limit(message.chat.id):
             safe_send_message(message.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
@@ -1985,20 +1987,17 @@ def show_settings(message):
                                      callback_data="timezone_settings")
         )
 
-        # Добавляем кнопку управления городами, если они есть
         if saved_cities:
             markup.add(
                 types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'],
                                          callback_data="show_saved_cities_settings")
             )
 
-        # Добавляем кнопку "Назад"
         markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['back_button'],
                                      callback_data="back_to_main")
         )
 
-        # Формируем текст настроек
         settings_text = LANGUAGES[lang]['settings_menu'].format(
             notifications="вкл" if settings.get('notifications', False) else "выкл",
             time=settings.get('notification_time', '--:--'),
@@ -2007,12 +2006,13 @@ def show_settings(message):
             timezone=settings.get('timezone', 'UTC')
         )
 
-        # Отправляем сообщение с настройками
+        logger.info(f"Sending settings menu to user {message.chat.id}")
+        
         bot.send_message(
             chat_id=message.chat.id,
             text=settings_text,
-            reply_markup=markup,
-            parse_mode="Markdown"
+            parse_mode="Markdown",
+            reply_markup=markup
         )
 
     except Exception as e:
