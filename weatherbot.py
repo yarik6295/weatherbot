@@ -1059,10 +1059,6 @@ def parse_utc_timezone(tz_str):
 def get_weather_icon(description: str) -> str:
     return WEATHER_ICONS.get(description.lower(), '🌤️')
 
-@bot.message_handler(func=lambda message: True)
-def debug_log_all_messages(message):
-    logger.info(f"[DEBUG] Received message: text='{message.text}' chat_id={message.chat.id}")
-
 def create_main_keyboard(chat_id):
     try:
         settings = data_manager.get_user_settings(chat_id)
@@ -2592,6 +2588,10 @@ def handle_unsupported_content(msg):
 
     except Exception as e:
         logger.error(f"Error in handle_unsupported_content: {e}")
+
+@bot.message_handler(func=lambda message: True)
+def debug_log_all_messages(message):
+    logger.info(f"[DEBUG] Received message: text='{message.text}' chat_id={message.chat.id}")
 
 from flask import Flask, request
 import os
