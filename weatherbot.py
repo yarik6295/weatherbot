@@ -1543,6 +1543,8 @@ def handle_forecast_date(call):
 # --- После handle_chart_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
 def handle_forecast_date(call):
+    from datetime import datetime, timedelta
+
     _, city, date_str = call.data.split("_", 2)
     settings = data_manager.get_user_settings(call.message.chat.id)
     lang = settings['language']
@@ -1551,27 +1553,25 @@ def handle_forecast_date(call):
     forecast_data = weather_api.get_forecast(city, lang)
     selected_date = datetime.strptime(date_str, "%Y-%m-%d")
     now = datetime.now()
+
     if selected_date.date() == now.date():
-        # Для сегодня: точки с 01:00 текущих суток до 01:00 следующих суток
-        start_dt = selected_date.replace(hour=1, minute=0, second=0, microsecond=0)
-        end_dt = start_dt + timedelta(hours=24)
-        start_ts = start_dt.timestamp()
-        end_ts = end_dt.timestamp()
+        # Прогноз с текущего времени на 24 часа вперед
+        start_ts = now.timestamp()
+        end_ts = (now + timedelta(hours=24)).timestamp()
         filtered_points = [
             item for item in forecast_data['list']
             if start_ts <= item['dt'] < end_ts
         ]
     else:
-        # Для других дат: все точки за выбранный день
+        # Прогноз на выбранный день
         filtered_points = [
             item for item in forecast_data['list']
             if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
         ]
-    # Формируем сообщение прогноза
+
     if not filtered_points:
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
     else:
-        # Стандартный заголовок из словаря для прогноза
         weekday = LANGUAGES[lang]['weekdays'][selected_date.weekday()]
         date_human = selected_date.strftime('%d.%m.%Y')
         header = LANGUAGES[lang]['forecast_title'].format(
@@ -1595,6 +1595,7 @@ def handle_forecast_date(call):
             ) + "\n"
         safe_send_message(call.message.chat.id, header + message)
     bot.answer_callback_query(call.id)
+    
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
