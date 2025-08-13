@@ -1509,166 +1509,113 @@ def show_saved_cities(msg):
 # --- Вместо функции show_chart_options ---
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['chart_button'] for lang in LANGUAGES.keys()))
 def show_chart_options(msg):
-    try:
-        if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
-            return
-        settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
-        saved_cities = settings.get('saved_cities', [])
-        if not saved_cities:
-            default_cities = [
-                LANGUAGES[lang]['city_tokyo'],
-                LANGUAGES[lang]['city_london'],
-                LANGUAGES[lang]['city_washington'],
-                LANGUAGES[lang]['city_newyork']
-            ]
-            cities = default_cities
-        else:
-            cities = saved_cities
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        for city in cities:
-                markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
-        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
-        safe_send_message(
-            msg.chat.id,
-            LANGUAGES[lang]['select_city_chart'],
-            reply_markup=markup
-        )
-    except Exception as e:
-        logger.error(f"Error in show_chart_options: {e}")
+    settings = data_manager.get_user_settings(msg.chat.id)
+    lang = settings['language']
+    saved_cities = settings.get('saved_cities', [])
+    cities = saved_cities if saved_cities else [
+        LANGUAGES[lang]['city_tokyo'],
+        LANGUAGES[lang]['city_london'],
+        LANGUAGES[lang]['city_washington'],
+        LANGUAGES[lang]['city_newyork']
+    ]
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    for city in cities:
+        markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
+    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
+    bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_chart'], reply_markup=markup)
 
 # --- После show_chart_options ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chartcity_"))
 def handle_chart_city(call):
-    try:
-        city = call.data.split("_", 1)[1]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        today = datetime.now()
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        weekdays = LANGUAGES[lang]['weekdays']
-        for i in range(5):
-            date = today + timedelta(days=i)
-            date_str = date.strftime('%Y-%m-%d')
-            weekday_idx = date.weekday() % 7
-            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
-            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"chartdate_{city}_{date_str}"))
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_chart'], reply_markup=markup)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in handle_chart_city: {e}")
-        safe_send_message(call.message.chat.id, f"Ошибка: {e}")     
+    city = call.data.split("_", 1)[1]
+    settings = data_manager.get_user_settings(call.message.chat.id)
+    lang = settings['language']
+    today = datetime.now()
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    weekdays = LANGUAGES[lang]['weekdays']
+    for i in range(5):
+        date = today + timedelta(days=i)
+        date_str = date.strftime('%Y-%m-%d')
+        weekday_idx = date.weekday() % 7
+        label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
+        markup.add(types.InlineKeyboardButton(text=label, callback_data=f"chartdate_{city}_{date_str}"))
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    bot.send_message(call.message.chat.id, LANGUAGES[lang]['select_date_chart'], reply_markup=markup)
+    bot.answer_callback_query(call.id)
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
 def handle_forecast_city(call):
     city = call.data.split("_", 1)[1]
-    try:
-        city = call.data.split("_", 1)[1]
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        today = datetime.now()
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        weekdays = LANGUAGES[lang]['weekdays']
-        for i in range(5):
-            date = today + timedelta(days=i)
-            date_str = date.strftime('%Y-%m-%d')
-            weekday_idx = date.weekday() % 7
-            label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
-            markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['select_date_forecast'], reply_markup=markup)
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in handle_forecast_city: {e}")
-        safe_send_message(call.message.chat.id, "Ошибка при выборе даты")
+    settings = data_manager.get_user_settings(call.message.chat.id)
+    lang = settings['language']
+    today = datetime.now()
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    weekdays = LANGUAGES[lang]['weekdays']
+    for i in range(5):
+        date = today + timedelta(days=i)
+        date_str = date.strftime('%Y-%m-%d')
+        weekday_idx = date.weekday() % 7
+        label = f"{date.strftime('%d.%m')} ({weekdays[weekday_idx]})"
+        markup.add(types.InlineKeyboardButton(text=label, callback_data=f"forecastdate_{city}_{date_str}"))
+    # Удаляем предыдущее сообщение
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    # Отправляем новое сообщение с датами
+    bot.send_message(call.message.chat.id, LANGUAGES[lang]['select_date_forecast'], reply_markup=markup)
+    bot.answer_callback_query(call.id)
+
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
-    if not check_rate_limit(msg.chat.id):
-        safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
-        return
     settings = data_manager.get_user_settings(msg.chat.id)
     lang = settings['language']
     saved_cities = settings.get('saved_cities', [])
     if not saved_cities:
-        safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
+        bot.send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
         return
-    # Новый UX: сначала выбор города, потом даты
     markup = types.InlineKeyboardMarkup(row_width=2)
     for city in saved_cities:
         markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
-    safe_send_message(
-        msg.chat.id,
-        LANGUAGES[lang]['select_city_forecast'],
-        reply_markup=markup
-    )
+    bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_forecast'], reply_markup=markup)
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
 def handle_forecast_date(call):
     _, city, date_str = call.data.split("_", 2)
     settings = data_manager.get_user_settings(call.message.chat.id)
     lang = settings['language']
+    bot.delete_message(call.message.chat.id, call.message.message_id)
     send_forecast_for_date(call.message.chat.id, city, lang, date_str)
     bot.answer_callback_query(call.id)
 
 # --- После handle_chart_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chartdate_"))
 def handle_chart_date(call):
-    try:
-        _, city, date_str = call.data.split("_", 2)
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        
-        logger.info(f"Getting forecast for chart: {city}, {date_str}")
-        forecast_data = weather_api.get_forecast(city, lang)
-        
-        if not forecast_data:
-            logger.error("No forecast data received")
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
-            bot.answer_callback_query(call.id)
-            return
-
-        # Фильтруем данные по дате
-        filtered_data = {
-            'city': forecast_data.get('city', {}),
-            'list': [
-                item for item in forecast_data['list'] 
-                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
-            ]
-        }
-        
-        if not filtered_data['list']:
-            logger.error(f"No data for date: {date_str}")
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
-            bot.answer_callback_query(call.id)
-            return
-
-        # Создаем график
-        chart_buffer = ChartGenerator.create_temperature_chart(filtered_data, city, lang)
-        if chart_buffer:
-            bot.send_photo(
-                call.message.chat.id,
-                chart_buffer,
-                caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
-            )
-        else:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Failed to create chart"))
-            
-        bot.answer_callback_query(call.id)
-
-    except Exception as e:
-        logger.error(f"Error in handle_chart_date: {e}")
-        logger.exception("Full traceback:")
-        try:
-            safe_send_message(
-                call.message.chat.id, 
-                LANGUAGES[settings['language']]['error'].format(error="Chart generation failed")
-            )
-            bot.answer_callback_query(call.id)
-        except:
-            pass
-
+    _, city, date_str = call.data.split("_", 2)
+    settings = data_manager.get_user_settings(call.message.chat.id)
+    lang = settings['language']
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    # Получить forecast_data, отфильтровать по дате, построить график
+    forecast_data = weather_api.get_forecast(city, lang)
+    filtered_data = {
+        'city': forecast_data.get('city', {}),
+        'list': [
+            item for item in forecast_data['list'] 
+            if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+        ]
+    }
+    chart_buffer = ChartGenerator.create_temperature_chart(filtered_data, city, lang)
+    if chart_buffer:
+        bot.send_photo(
+            call.message.chat.id,
+            chart_buffer,
+            caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
+        )
+    else:
+        bot.send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Failed to create chart"))
+    bot.answer_callback_query(call.id)
+    
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
