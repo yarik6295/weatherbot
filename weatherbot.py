@@ -1060,19 +1060,29 @@ def get_weather_icon(description: str) -> str:
     return WEATHER_ICONS.get(description.lower(), '🌤️')
 
 def create_main_keyboard(chat_id):
-    lang = data_manager.get_user_settings(chat_id)['language']
-    
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row(
-        types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
-        types.KeyboardButton(LANGUAGES[lang]['chart_button'])
-    )
-    kb.row(
-        types.KeyboardButton(LANGUAGES[lang]['share_button']),
-        types.KeyboardButton(LANGUAGES[lang]['settings_button'])
-    )
+    try:
+        settings = data_manager.get_user_settings(chat_id)
+        lang = settings.get('language', 'ru')
         
-    return kb
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        
+        # Добавляем логирование для отладки
+        logger.info(f"Creating keyboard for user {chat_id}")
+        logger.info(f"Settings button text: {LANGUAGES[lang]['settings_button']}")
+        
+        kb.row(
+            types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
+            types.KeyboardButton(LANGUAGES[lang]['chart_button'])
+        )
+        kb.row(
+            types.KeyboardButton(LANGUAGES[lang]['share_button']),
+            types.KeyboardButton(LANGUAGES[lang]['settings_button'])
+        )
+        
+        return kb
+    except Exception as e:
+        logger.error(f"Error creating keyboard: {e}")
+        return types.ReplyKeyboardMarkup()
 
 def safe_send_message(chat_id: int, text: str, **kwargs):
     try:
@@ -1946,21 +1956,23 @@ def handle_text(message):
             reply_markup=types.ReplyKeyboardRemove()
         )
 
-@bot.message_handler(func=lambda m: m.text and m.text == "⚙️ Настройки")
-def show_settings(msg):
-    logger.info(f"Settings button pressed. Text: {msg.text}")
+@bot.message_handler(func=lambda message: message.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
+def show_settings(message):
     try:
-        if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+        logger.info(f"Settings handler triggered with text: '{message.text}'")
+        
+        if not check_rate_limit(message.chat.id):
+            safe_send_message(message.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
             return
 
-        settings = data_manager.get_user_settings(msg.chat.id)
+        settings = data_manager.get_user_settings(message.chat.id)
         lang = settings.get('language', 'ru')
         saved_cities = settings.get('saved_cities', [])
 
+        # Создаем клавиатуру с настройками
         markup = types.InlineKeyboardMarkup(row_width=2)
         
-        # Добавляем основные кнопки настроек
+        # Основные кнопки настроек
         markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], 
                                      callback_data="notifications_settings"),
@@ -1997,7 +2009,7 @@ def show_settings(msg):
 
         # Отправляем сообщение с настройками
         bot.send_message(
-            chat_id=msg.chat.id,
+            chat_id=message.chat.id,
             text=settings_text,
             reply_markup=markup,
             parse_mode="Markdown"
@@ -2006,7 +2018,7 @@ def show_settings(msg):
     except Exception as e:
         logger.error(f"Error in show_settings: {e}")
         logger.exception("Full traceback:")
-        safe_send_message(msg.chat.id, "⚠️ Ошибка загрузки настроек")
+        safe_send_message(message.chat.id, "⚠️ Ошибка загрузки настроек")
 
 @bot.message_handler(func=lambda m: m.text and '⚙️' in m.text)
 def debug_settings(msg):
