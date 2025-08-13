@@ -113,7 +113,7 @@ ALERT_ICONS = {
 
 LANGUAGES = {
     'ru': {
-        'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+        'weekdays': ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
         'welcome': "👋 *Приветствуем в MeteoBox📦🌦️!*\n"
             "📌 Как пользоваться:\n"
             "1️⃣ Отправьте 📍 геолокацию или введите название города\n"
@@ -244,7 +244,7 @@ LANGUAGES = {
         
     },
     'en': {
-        'weekdays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        'weekdays': ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
         'welcome': "👋 *Welcome to MeteoBox📦🌦️!*\n"
             "📌 How to use:\n"
             "1️⃣ Send 📍 your location or enter a city name\n"
@@ -375,7 +375,7 @@ LANGUAGES = {
         
     },
     'uk': {
-        'weekdays': ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'],
+        'weekdays': ['понеділок', 'вівторок', 'середа', 'четвер', 'пятниця', 'субота', 'неділя'],
         'welcome': "👋 *Ласкаво просимо до MeteoBox📦🌦️!*\n"
             "📌 Як користуватись:\n"
             "1️⃣ Надішліть 📍 геолокацію або введіть назву міста\n"
@@ -742,7 +742,9 @@ class ChartGenerator:
             ax.xaxis.set_major_locator(locator)
             ax.xaxis.set_major_formatter(formatter)
             
-            plt.xticks(rotation=45, ha='right')
+            for label in ax.get_xticklabels():
+                label.set_rotation(45)
+                label.set_ha('right')
             plt.tight_layout()
             
             buffer = io.BytesIO()
@@ -792,7 +794,11 @@ class ChartGenerator:
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             
-            plt.xticks(rotation=45, ha='right')
+            fig, ax = plt.subplots(figsize=(12, 6))
+
+            for label in ax.get_xticklabels():
+                label.set_rotation(45)
+                label.set_ha('right')
             plt.tight_layout()
             
             buffer = io.BytesIO()
@@ -1592,7 +1598,8 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
                 continue
             hour = dt.strftime('%H')
             temp = round(item['main']['temp'])
-            desc = item['weather'][0]['description'].title()
+            desc = item['weather'][0]['description']
+            desc = desc[0].upper() + desc[1:] if desc else desc
             icon = get_weather_icon(item['weather'][0]['description'])
             message += LANGUAGES[lang]['hourly'].format(
                 hour=hour,
@@ -2166,7 +2173,8 @@ def send_forecast(chat_id: int, city: str, lang: str):
             dt = datetime.fromtimestamp(item['dt'])
             hour = dt.strftime('%H')
             temp = round(item['main']['temp'])
-            desc = item['weather'][0]['description'].title()
+            desc = item['weather'][0]['description']
+            desc = desc[0].upper() + desc[1:] if desc else desc
             icon = get_weather_icon(item['weather'][0]['description'])
 
             message += LANGUAGES[lang]['hourly'].format(
