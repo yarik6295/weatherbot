@@ -717,33 +717,36 @@ class WeatherAPI:
 # -- Chart Generator --
 class ChartGenerator:
     @staticmethod
-    def create_weather_chart(forecast_data, city, lang):
+    def create_weather_chart_for_day(forecast_data, city, lang, date_str):
         try:
-            # Проверка наличия данных
-            if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
-                logger.error("Нет данных для графика")
+            # Фильтрация точек только на выбранный день
+            day_points = [
+                item for item in forecast_data.get('list', [])
+                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+            ]
+            if not day_points:
+                logger.error("Нет данных для графика на выбранную дату")
                 return None
 
             plt.style.use('dark_background')
             fig, ax1 = plt.subplots(figsize=(14, 7), dpi=150)
 
-            times = [datetime.fromtimestamp(item['dt']) for item in forecast_data['list'][:24]]
-            temps = [item['main']['temp'] for item in forecast_data['list'][:24]]
+            times = [datetime.fromtimestamp(item['dt']) for item in day_points]
+            temps = [item['main']['temp'] for item in day_points]
 
-            # Подписи и цвета через словарь LANGUAGES
             ylabel_temp = LANGUAGES[lang].get('weather_chart', 'Температура (°C)')
             ylabel_precip = LANGUAGES[lang].get('precipitation_chart', 'Осадки (мм)')
             xlabel = LANGUAGES[lang].get('select_date_chart', 'Время')
             chart_title = LANGUAGES[lang].get('precipitation_chart', 'График осадков и температуры')
 
-            # Линия температуры
+            # Температура
             ax1.plot(times, temps, color='#FFA500', linewidth=2, label=ylabel_temp)
             ax1.set_ylabel(ylabel_temp, color='#FFA500')
             ax1.tick_params(axis='y', colors='#FFA500')
 
-            # Осадки (столбики)
+            # Осадки
             precip = []
-            for item in forecast_data['list'][:24]:
+            for item in day_points:
                 rain = item.get('rain', {}).get('3h', 0)
                 snow = item.get('snow', {}).get('3h', 0)
                 precip.append(rain + snow)
@@ -752,10 +755,10 @@ class ChartGenerator:
             ax2.set_ylabel(ylabel_precip, color='#1E90FF')
             ax2.tick_params(axis='y', colors='#1E90FF')
 
-            ax1.set_title(f'{chart_title} - {city}')
+            ax1.set_title(f'{chart_title} - {city} ({date_str})')
             ax1.set_xlabel(xlabel)
 
-            # Форматирование оси X
+            # Формат оси X
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             for label in ax1.get_xticklabels():
@@ -1507,7 +1510,7 @@ def handle_chart_date(call):
             if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
         ]
     }
-    chart_buffer = ChartGenerator.create_weather_chart(forecast_data, city, lang)
+    chart_buffer = ChartGenerator.create_weather_chart_for_day(filtered_data, city, lang, date_str)
     if chart_buffer:
         bot.send_photo(
             call.message.chat.id,
@@ -1608,22 +1611,25 @@ def send_weather_chart(call):
         city = call.data.split('_', 1)[1]
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        
+
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
             return
-        
-        chart_buffer = ChartGenerator.create_weather_chart(forecast_data, city, lang)
+
+        # date_str — выбери нужную дату (например, сегодня)
+        date_str = datetime.now().strftime('%Y-%m-%d')
+
+        chart_buffer = ChartGenerator.create_weather_chart_for_day(forecast_data, city, lang, date_str)
         if chart_buffer:
             bot.send_photo(
                 call.message.chat.id,
                 chart_buffer,
-                caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city}"
+                caption=f"📊 {LANGUAGES[lang]['weather_chart']} - {city} ({date_str})"
             )
         else:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Chart generation failed"))
-        
+
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in send_weather_chart: {e}")
@@ -1975,17 +1981,7 @@ def set_utc_timezone(call):
         bot.answer_callback_query(call.id, "❌ Ошибка")    
 
 
-def send_current_weather(chat_id, city, lang, lat=None, lon=None):
-    """
-    Отправляет текущую погоду и график прогноза для указанного города
-    
-    Args:
-        chat_id (int): ID чата пользователя
-        city (str): Название города
-        lang (str): Код языка (ru/en/uk)
-        lat (float, optional): Широта для UV индекса
-        lon (float, optional): Долгота для UV индекса
-    """
+def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None):
     try:
         logger.info(f"Getting weather data for {city}")
         
@@ -1998,31 +1994,20 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
 
         # 2. Формируем основное сообщение с текущей погодой
         try:
-            # Температура
             temp = round(current_weather['main']['temp'])
             feels_like = round(current_weather['main']['feels_like'])
-            
-            # Описание погоды
             description = current_weather['weather'][0]['description'].title()
             icon = get_weather_icon(current_weather['weather'][0]['description'])
-            
-            # Ветер
             wind_speed = current_weather['wind']['speed']
             wind_gust = current_weather['wind'].get('gust', wind_speed)
             wind_dir = get_wind_direction(current_weather['wind'].get('deg'), lang)
-            
-            # Восход/закат
             sunrise = datetime.fromtimestamp(current_weather['sys']['sunrise']).strftime('%H:%M')
             sunset = datetime.fromtimestamp(current_weather['sys']['sunset']).strftime('%H:%M')
-            
-            # UV индекс (если доступны координаты)
             uv_info = ""
             if lat and lon:
                 uv, risk = get_uv_index(lat, lon, lang)
                 if uv is not None:
                     uv_info = "\n" + LANGUAGES[lang]['uv_index'].format(uv=uv, risk=risk)
-            
-            # Формируем сообщение
             message = (
                 f"{icon} {LANGUAGES[lang]['in_city'].format(city=city)}\n"
                 f"🌡️ {temp}°C {LANGUAGES[lang]['feels_like'].format(feels=feels_like)}\n"
@@ -2033,52 +2018,47 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None):
                 f"{LANGUAGES[lang]['sun_info'].format(sunrise=sunrise, sunset=sunset)}"
                 f"{uv_info}"
             )
-            
-            # Отправляем основное сообщение
             safe_send_message(chat_id, message, parse_mode="Markdown")
-            
         except KeyError as e:
             logger.error(f"Missing key in current weather data: {e}")
             safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error="Data structure error"))
             return
-            
+
         # 3. Получаем данные прогноза для графика
         logger.info(f"Getting forecast data for {city}")
         forecast_data = weather_api.get_forecast(city, lang)
-        
         if not forecast_data or 'list' not in forecast_data:
             logger.error(f"Invalid forecast data structure: {list(forecast_data.keys()) if forecast_data else 'None'}")
             return
-            
+
+        # Если дата не передана — используем сегодня
+        if date_str is None:
+            date_str = datetime.now().strftime('%Y-%m-%d')
+
         # 4. Создаем и отправляем график
         try:
-            logger.info("Creating temperature chart")
-            chart_buffer = ChartGenerator.create_weather_chart(forecast_data, city, lang)
-            
+            logger.info("Creating weather chart for current day")
+            chart_buffer = ChartGenerator.create_weather_chart_for_day(forecast_data, city, lang, date_str)
             if chart_buffer:
                 bot.send_photo(
                     chat_id, 
                     chart_buffer, 
                     caption=LANGUAGES[lang]['precipitation_chart'],
-                    reply_markup=create_main_keyboard(chat_id)  # Возвращаем основную клавиатуру
+                    reply_markup=create_main_keyboard(chat_id)
                 )
                 logger.info("Chart sent successfully")
             else:
                 logger.error("Failed to create chart buffer")
-                
         except Exception as chart_error:
             logger.error(f"Error creating/sending chart: {chart_error}")
-            logger.exception("Chart error details:")
-            # Продолжаем работу, так как основная информация уже отправлена
-            
     except Exception as e:
         logger.error(f"General error in send_current_weather: {e}")
-        logger.exception("Full error details:")
         safe_send_message(
             chat_id, 
             LANGUAGES[lang]['error'].format(error="Internal error"),
             reply_markup=create_main_keyboard(chat_id)
         )
+
 
 
 def get_uv_index(lat, lon, lang='en'):
