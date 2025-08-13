@@ -1500,7 +1500,44 @@ def handle_forecast_date(call):
     settings = data_manager.get_user_settings(call.message.chat.id)
     lang = settings['language']
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    send_forecast_for_date(call.message.chat.id, city, lang, date_str)
+    
+    forecast_data = weather_api.get_forecast(city, lang)
+    selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+    if selected_date.date() == datetime.now().date():
+        # Прогноз с 01:00 ночи на 24 часа вперед
+        start_dt = selected_date.replace(hour=1, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(hours=24)
+        start_ts = start_dt.timestamp()
+        end_ts = end_dt.timestamp()
+        filtered_points = [
+            item for item in forecast_data['list']
+            if start_ts <= item['dt'] < end_ts
+        ]
+    else:
+        filtered_points = [
+            item for item in forecast_data['list'] 
+            if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+        ]
+    # Формируем сообщение прогноза
+    if not filtered_points:
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+    else:
+        header = f"🌤️ Прогноз погоды на {'24 часа с 01:00' if selected_date.date() == datetime.now().date() else date_str} в городе {city}:\n\n"
+        message = ""
+        for item in filtered_points:
+            dt = datetime.fromtimestamp(item['dt'])
+            hour = dt.strftime('%H')
+            temp = round(item['main']['temp'])
+            desc = item['weather'][0]['description']
+            desc = desc[0].upper() + desc[1:] if desc else desc
+            icon = get_weather_icon(item['weather'][0]['description'])
+            message += LANGUAGES[lang]['hourly'].format(
+                hour=hour,
+                icon=icon,
+                desc=desc,
+                temp=temp
+            ) + "\n"
+        safe_send_message(call.message.chat.id, header + message)
     bot.answer_callback_query(call.id)
 
 # --- После handle_chart_city ---
@@ -2502,3 +2539,4 @@ if __name__ == '__main__':
         logger.error(f"💥 Critical error: {e}")
     finally:
         logger.info("🛑 MeteoBox📦🌦️ shutdown complete")
+
