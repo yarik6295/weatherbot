@@ -724,7 +724,8 @@ class ChartGenerator:
                 return None
                 
             plt.style.use('fast')
-            fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
+            fig, ax = plt.subplots(figsize=(14, 7), dpi=100)
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             
             data = [(datetime.fromtimestamp(item['dt']), item['main']['temp'])
                     for item in forecast_data['list'][:24]]
@@ -743,7 +744,7 @@ class ChartGenerator:
             ax.xaxis.set_major_formatter(formatter)
             
             for label in ax.get_xticklabels():
-                label.set_rotation(45)
+                label.set_rotation(35)
                 label.set_ha('right')
             plt.tight_layout()
             
@@ -767,7 +768,7 @@ class ChartGenerator:
                 return None
 
             plt.style.use('dark_background')
-            fig, ax1 = plt.subplots(figsize=(12, 6))
+            fig, ax1 = plt.subplots(figsize=(14, 7))
             
             times = []
             temps = []
@@ -794,10 +795,12 @@ class ChartGenerator:
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
             
-            fig, ax = plt.subplots(figsize=(12, 6))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+
+            fig, ax = plt.subplots(figsize=(14, 7))
 
             for label in ax.get_xticklabels():
-                label.set_rotation(45)
+                label.set_rotation(35)
                 label.set_ha('right')
             plt.tight_layout()
             
