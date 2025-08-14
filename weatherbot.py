@@ -122,7 +122,7 @@ LANGUAGES = {
         'send_location': "📍 Геолокация",
         'back': "🔙 Назад",
         'main_menu': "🏠 Главное меню",
-        'forecast_title': "{icon} *Прогноз погоды в {city}*\n📅 {date}",
+        'forecast_title': "{icon} Прогноз погоды в {city}\n📅 {date}",
         'select_date': "📅 Выберите дату прогноза",
         'select_city_forecast': "🏙️ Выбор города для прогноза",
         'select_date_forecast': "📅 Выбор даты для прогноза",
@@ -253,7 +253,7 @@ LANGUAGES = {
         'send_location': "📍 Location",
         'back': "🔙 Back",
         'main_menu': "🏠 Main menu",
-        'forecast_title': "{icon} *Weather forecast in {city}*\n📅 {date}",
+        'forecast_title': "{icon} Weather forecast in {city}\n📅 {date}",
         'select_date': "📅 Select forecast date",
         'select_city_forecast': "🏙️ Select city for forecast",
         'select_date_forecast': "📅 Select date for forecast",
@@ -384,7 +384,7 @@ LANGUAGES = {
         'send_location': "📍 Геолокація",
         'back': "🔙 Назад",
         'main_menu': "🏠 Головне меню",
-        'forecast_title': "{icon} *Прогноз погоди в {city}*\n📅 {date}",
+        'forecast_title': "{icon} Прогноз погоди в {city}\n📅 {date}",
         'select_date': "📅 Оберіть дату прогнозу",
         'select_city_forecast': "🏙️ Вибір міста для прогнозу",
         'select_date_forecast': "📅 Вибір дати для прогнозу",
@@ -792,6 +792,30 @@ WEATHER_CACHE_TTL = 300  # 5 минут
 
 USER_RATE_LIMIT = 20  # сообщений в минуту
 _user_msg_times = defaultdict(list)
+
+ADMIN_CHAT_ID = 1479352212
+
+@bot.message_handler(commands=['broadcast'])
+def cmd_broadcast(msg):
+    if msg.chat.id != ADMIN_CHAT_ID:
+        return
+    users = data_manager.collection.find({}, {"chat_id": 1, "language": 1})
+    count, errors = 0, 0
+    for user in users:
+        chat_id = user.get("chat_id")
+        user_lang = user.get("language", "ru")
+        if user_lang not in LANGUAGES or 'broadcast_restart' not in LANGUAGES[user_lang]:
+            logger.warning(f"No broadcast text for lang '{user_lang}', skipping chat_id={chat_id}")
+            continue
+        text = LANGUAGES[user_lang]['broadcast_restart']
+        try:
+            safe_send_message(chat_id, text)
+            count += 1
+        except Exception as e:
+            logger.error(f"Broadcast error for chat_id={chat_id}: {e}")
+            errors += 1
+    logger.info(f"Broadcast finished. Sent: {count}, Errors: {errors}")
+    bot.send_message(msg.chat.id, f"Рассылка завершена. Отправлено: {count}, ошибок: {errors}")
 
 def cleanup_resources():
     """Периодическая очистка ресурсов"""
