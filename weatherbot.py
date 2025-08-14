@@ -1555,7 +1555,7 @@ def handle_forecast_date(call):
     now = datetime.now()
 
     if selected_date.date() == now.date():
-        # Прогноз с текущего времени на 24 часа вперед
+        # Прогноз с текущего времени на 24 часа вперёд (например, с 06:00 до 06:00 завтра)
         start_ts = now.timestamp()
         end_ts = (now + timedelta(hours=24)).timestamp()
         filtered_points = [
@@ -1595,7 +1595,7 @@ def handle_forecast_date(call):
             ) + "\n"
         safe_send_message(call.message.chat.id, header + message)
     bot.answer_callback_query(call.id)
-    
+
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
     try:
