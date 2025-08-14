@@ -235,6 +235,7 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ лишком длинное название города",
         'invalid_city_chars': "⚠️ Недопустимые символы в названии города",
         'weather_not_found': "⚠️ Не удалось получить погоду для этого места",
+        'broadcast_restart': "⚠️ Внимание! Для обновления бота, пожалуйста, перезапустите его (отправьте /start или напишите любое сообщение). Спасибо!"
         
     },
     'en': {
@@ -366,6 +367,7 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ City name is too long",
         'invalid_city_chars': "⚠️ Invalid characters in city name",
         'weather_not_found': "⚠️ Could not get weather for this location",
+        'broadcast_restart': "⚠️ Attention! To update the bot, please restart it (send /start or any message). Thank you!"
         
     },
     'uk': {
@@ -497,6 +499,7 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ Занадто довга назва міста",
         'invalid_city_chars': "⚠️ Недопустимі символи в назві міста",
         'weather_not_found': "⚠️ Не вдалося отримати погоду для цього місця",
+        'broadcast_restart': "⚠️ Увага! Для оновлення бота, будь ласка, перезапустіть його (надішліть /start або будь-яке повідомлення). Дякуємо!"
     
     }
 }
