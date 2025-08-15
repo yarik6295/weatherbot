@@ -109,11 +109,11 @@ ALERT_ICONS = {
 LANGUAGES = {
     'ru': {
         'weekdays': ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
-        'welcome': "👋 *Приветствуем в MeteoBox📦🌦️!*\n"
+        'welcome': "👋 Приветствуем в *MeteoBox*📦🌦️!\n"
             "📌 Как пользоваться:\n"
-            "1️⃣ Отправьте 📍 геолокацию или введите название города\n"
+            "1️⃣ Отправьте геолокацию или введите название города\n"
             "2️⃣ Используйте кнопки для просмотра прогноза и графиков\n"
-            "3️⃣ Настройте уведомления в разделе ⚙️ Настройки\n\n"
+            "3️⃣ Настройте уведомления в настройках\n\n"
             "📍 Для начала отправьте ваш город или местоположение:",
         'ask_location': "📍 Отправьте геолокацию или введите название города:",
         'forecast_button': "🌦️ Прогноз",
@@ -236,11 +236,11 @@ LANGUAGES = {
     },
     'en': {
         'weekdays': ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        'welcome': "👋 *Welcome to MeteoBox📦🌦️!*\n"
+        'welcome': "👋 Welcome to *MeteoBox*📦🌦️!\n"
             "📌 How to use:\n"
-            "1️⃣ Send 📍 your location or enter a city name\n"
+            "1️⃣ Send your location or enter a city name\n"
             "2️⃣ Use buttons for quick access to forecast and charts\n"
-            "3️⃣ Set up notifications in ⚙️ Settings\n\n"
+            "3️⃣ Set up notifications in settings\n\n"
             "📍 To start, send your city or location:",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
@@ -363,11 +363,11 @@ LANGUAGES = {
     },
     'uk': {
         'weekdays': ['понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота', 'неділя'],
-        'welcome': "👋 *Ласкаво просимо до MeteoBox📦🌦️!*\n"
+        'welcome': "👋 Ласкаво просимо до *MeteoBox*📦🌦️!\n"
             "📌 Як користуватись:\n"
-            "1️⃣ Надішліть 📍 геолокацію або введіть назву міста\n"
+            "1️⃣ Надішліть геолокацію або введіть назву міста\n"
             "2️⃣ Використовуйте кнопки для швидкого доступу до прогнозу та графіків\n"
-            "3️⃣ Налаштуйте сповіщення в ⚙️ Налаштуваннях\n\n"
+            "3️⃣ Налаштуйте сповіщення в налаштуваннях\n\n"
             "📍 Для початку надішліть своє місто або місцезнаходження:",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
@@ -676,14 +676,12 @@ class WeatherAPI:
                 'lang': lang
             }
             
-            logger.info(f"Sending forecast request for city: {city}")
             response = requests.get(
                 f"{self.base_url}/forecast",
                 params=params,
                 timeout=self.timeout
             )
-            
-            logger.info(f"API Response status: {response.status_code}")
+            logger.debug(f"Request URL: {response.url}")  # логируем URL запроса
             
             if response.status_code != 200:
                 logger.error(f"API Error: {response.status_code} - {response.text}")
@@ -1161,7 +1159,6 @@ def create_main_keyboard(chat_id):
         
         # Добавляем логирование для отладки
         logger.info(f"Creating keyboard for user {chat_id}")
-        logger.info(f"Settings button text: {LANGUAGES[lang]['settings_button']}")
         
         kb.row(
             types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
@@ -1948,7 +1945,6 @@ def process_new_city(msg, city=None):
             else:
                 city_name = city
 
-            logger.info(f"Requesting forecast for city: {city_name}")
             weather_data = weather_api.get_forecast(city_name, lang)
             if not weather_data or 'city' not in weather_data:
                 logger.warning(f"No weather data for city: {city_name}")
@@ -2084,8 +2080,6 @@ def show_settings(message):
             cities=len(saved_cities),
             timezone=settings.get('timezone', 'UTC')
         )
-
-        logger.info(f"Sending settings menu to user {message.chat.id}")
         
         bot.send_message(
             chat_id=message.chat.id,
@@ -2246,9 +2240,6 @@ def set_utc_timezone(call):
 
 def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None):
     try:
-        logger.info(f"Getting weather data for {city}")
-        
-        # 1. Получаем текущую погоду
         current_weather = weather_api.get_current_weather(city, lang)
         if not current_weather:
             logger.error(f"Failed to get current weather for {city}")
@@ -2288,7 +2279,6 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None)
             return
 
         # 3. Получаем данные прогноза для графика
-        logger.info(f"Getting forecast data for {city}")
         forecast_data = weather_api.get_forecast(city, lang)
         if not forecast_data or 'list' not in forecast_data:
             logger.error(f"Invalid forecast data structure: {list(forecast_data.keys()) if forecast_data else 'None'}")
@@ -2300,7 +2290,6 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None)
 
         # 4. Создаем и отправляем график
         try:
-            logger.info("Creating weather chart for current day")
             chart_buffer = ChartGenerator.create_weather_chart_for_day(forecast_data, city, lang, date_str)
             if chart_buffer:
                 bot.send_photo(
@@ -2309,7 +2298,6 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None)
                     caption=LANGUAGES[lang]['precipitation_chart'],
                     reply_markup=create_main_keyboard(chat_id)
                 )
-                logger.info("Chart sent successfully")
             else:
                 logger.error("Failed to create chart buffer")
         except Exception as chart_error:
@@ -2393,9 +2381,7 @@ def send_forecast(chat_id: int, city: str, lang: str):
         safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error=str(e)))
 
 def send_notifications():
-    """Send daily weather notifications to users at their preferred time"""
     try:
-        logger.info("[NOTIFICATIONS] Starting notification cycle")
 
         utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         logger.debug(f"[NOTIFICATIONS] Current UTC time: {utc_now}")
@@ -2465,8 +2451,6 @@ def send_notifications():
                 error_count += 1
                 logger.error(f"[NOTIFICATIONS] Error for user {user.get('chat_id')}: {str(user_error)}", exc_info=True)
                 continue
-        
-        logger.info(f"[NOTIFICATIONS] Completed. Sent: {notification_count}, Errors: {error_count}")
         
     except Exception as e:
         logger.critical(f"[NOTIFICATIONS] System error: {str(e)}", exc_info=True)
