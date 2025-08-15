@@ -571,7 +571,7 @@ class DataManager:
         doc = self.collection.find_one({"chat_id": chat_id})
         defaults = {
             "chat_id": chat_id,
-            'language': 'ru',
+            'language': 'en',
             'notifications': False,
             'notification_time': '20:00',
             'saved_cities': [],
@@ -1150,7 +1150,7 @@ def get_weather_icon(description: str) -> str:
 def create_main_keyboard(chat_id):
     try:
         settings = data_manager.get_user_settings(chat_id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         
@@ -1197,7 +1197,7 @@ def cmd_start(msg):
             'notification_city': None,
             'notification_time': '08:00',
             'notifications': True,
-            'language': 'ru'
+            'language': 'en'
         }
         
         current_settings = data_manager.get_user_settings(msg.chat.id)
@@ -1229,9 +1229,9 @@ def show_language_menu(call):
         # Получаем текущие настройки с защитой от ошибок
         try:
             user_settings = data_manager.get_user_settings(call.message.chat.id)
-            current_lang = user_settings.get('language', 'ru')
+            current_lang = user_settings.get('language', 'en')
         except:
-            current_lang = 'ru'
+            current_lang = 'en'
         
         # Создаем кнопки выбора языка с защитными проверками
         lang_markup = types.InlineKeyboardMarkup(row_width=2)
@@ -1506,7 +1506,7 @@ def set_notification_city(call):
 def handle_location(msg):
     try:
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         
         if not rate_limiter.can_make_request(msg.chat.id):
             safe_send_message(msg.chat.id, LANGUAGES[lang]['rate_limit_message'])
@@ -1757,10 +1757,10 @@ def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: st
     try:
         forecast_data = get_cached_weather(city, lang, weather_api.get_forecast)
         if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
-            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['ru'])['not_found'])
+            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['en'])['not_found'])
             return
         if not forecast_data or 'list' not in forecast_data or not forecast_data['list']:
-            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['ru'])['not_found'])
+            safe_send_message(chat_id, LANGUAGES.get(lang, LANGUAGES['en'])['not_found'])
             return
         if not forecast_data:
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
@@ -1930,7 +1930,7 @@ def process_new_city(msg, city=None):
     try:
         logger.info(f"Processing new city request: msg={msg.text if hasattr(msg, 'text') else 'No text'}, city={city}")
         settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         
         if isinstance(city, str) or city is None:
             # Обработка текстового ввода
@@ -2041,7 +2041,7 @@ def show_settings(message):
             return
 
         settings = data_manager.get_user_settings(message.chat.id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         saved_cities = settings.get('saved_cities', [])
 
         # Создаем клавиатуру с настройками
@@ -2208,7 +2208,7 @@ def set_language(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "timezone_settings")
 def handle_timezone_settings(call):
-    lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'ru')
+    lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
     markup = generate_utc_timezone_keyboard(lang)
     bot.edit_message_text(
         LANGUAGES[lang]['choose_timezone'],
@@ -2227,7 +2227,7 @@ def set_utc_timezone(call):
             bot.answer_callback_query(call.id, "❌ Некорректное значение UTC")
             return
         data_manager.update_user_setting(call.message.chat.id, 'timezone', f"UTC{offset:+g}")
-        lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'ru')
+        lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['timezone_set'].format(timezone=f"UTC{offset:+g}"))
         show_settings(call.message)
         bot.answer_callback_query(call.id)
@@ -2596,7 +2596,7 @@ def handle_text(message):
             return
             
         settings = data_manager.get_user_settings(message.chat.id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         
         # Игнорируем служебные сообщения (кнопки меню и т.д.)
         menu_buttons = [
@@ -2620,7 +2620,7 @@ def handle_text(message):
     except Exception as e:
         logger.error(f"Error handling text message: {e}")
         settings = data_manager.get_user_settings(message.chat.id)
-        lang = settings.get('language', 'ru')
+        lang = settings.get('language', 'en')
         safe_send_message(
             message.chat.id,
             LANGUAGES[lang]['general_error'],
