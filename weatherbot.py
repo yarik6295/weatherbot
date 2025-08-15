@@ -1225,100 +1225,66 @@ def cmd_start(msg):
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_lang_menu")
 def show_language_menu(call):
-    lang = call.data.split('_')[3]
     try:
-        # Получаем текущие настройки с защитой от ошибок
-        try:
-            user_settings = data_manager.get_user_settings(call.message.chat.id)
-            current_lang = user_settings.get('language', 'en')
-        except:
-            current_lang = 'en'
-        
-        # Создаем кнопки выбора языка с защитными проверками
-        lang_markup = types.InlineKeyboardMarkup(row_width=2)
-        for code in LANGUAGES.keys():
-            # Безопасное получение названия языка
-            lang_name = LANGUAGES.get(code, {}).get('language_name', code.upper())
-            
-            lang_markup.add(
-                types.InlineKeyboardButton(
-                    text=lang_name,
-                    callback_data=f"set_init_lang_{code}"
-                )
-            )
+        # текущий язык для текста заголовка
+        current_lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
 
-        # Безопасное получение текста для сообщения
-        menu_text = LANGUAGES.get(current_lang, {}).get(
-            'language_title', 
-            "Choose language:"
-        )
+        # рисуем список языков из словаря LANGUAGES
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        for code, meta in LANGUAGES.items():
+            kb.add(types.InlineKeyboardButton(
+                meta.get('language_name', code.upper()),
+                callback_data=f"initlang:{code}"  # новый прозрачный префикс
+            ))
 
-        # Редактируем сообщение с обработкой ошибок
+        # редактируем прежнее сообщение (если нельзя — просто отправь новое)
         try:
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text=menu_text,
-                reply_markup=lang_markup
+                text=LANGUAGES[current_lang]['language_title'],
+                reply_markup=kb
             )
-        except Exception as edit_error:
-            # Если не получилось отредактировать, отправляем новое
-            bot.send_message(
-                call.message.chat.id,
-                menu_text,
-                reply_markup=lang_markup
-            )
-            
-        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])    
-        # Всегда подтверждаем нажатие кнопки
-        bot.answer_callback_query(call.id)
+        except:
+            bot.send_message(call.message.chat.id, LANGUAGES[current_lang]['language_title'], reply_markup=kb)
 
+        bot.answer_callback_query(call.id)
     except Exception as e:
-        logger.error(f"Language menu error: {str(e)}")
+        logger.error(f"Language menu error: {e}")
         try:
             bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки меню")
         except:
             pass
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('set_init_lang_'))
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("initlang:"))
 def set_initial_language(call):
     try:
-        lang = call.data.split('_')[3]
+        lang = call.data.split(":", 1)[1]
         data_manager.update_user_setting(call.message.chat.id, 'language', lang)
 
-        # Создаем основную клавиатуру (НЕ добавляем туда геолокацию)
+        # главное меню
         main_kb = create_main_keyboard(call.message.chat.id)
 
-        # Отправляем приветствие
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.send_message(
-            call.message.chat.id,
-            LANGUAGES[lang]['welcome'],
-            parse_mode="Markdown",
-            reply_markup=main_kb
-        )
+        # клавиатура запроса геолокации
+        geo_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        geo_kb.add(types.KeyboardButton(LANGUAGES[lang]['send_location'], request_location=True))
 
-        # ВСЕГДА показываем дополнительную клавиатуру с геолокацией!
-        geo_markup = types.ReplyKeyboardMarkup(
-            resize_keyboard=True, 
-            one_time_keyboard=True
-        )
-        geo_markup.add(
-            types.KeyboardButton(
-                LANGUAGES[lang]['send_location'],
-                request_location=True
-            )
-        )
-        bot.send_message(
-            call.message.chat.id,
-            LANGUAGES[lang]['ask_location'],
-            reply_markup=geo_markup
-        )
+        # аккуратно обновляем UI
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
 
-        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
+        bot.send_message(call.message.chat.id, LANGUAGES[lang]['language_changed'])
+        bot.send_message(call.message.chat.id, LANGUAGES[lang]['ask_location'], reply_markup=geo_kb)
+        bot.send_message(call.message.chat.id, LANGUAGES[lang]['welcome'], reply_markup=main_kb)
 
+        bot.answer_callback_query(call.id)
     except Exception as e:
-        logger.error(f"Set language error: {e}")
+        logger.error(f"Set initial language error: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_settings")
 def handle_back_to_settings(call):
@@ -2180,24 +2146,38 @@ def remove_city_handler(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "language_settings")
 def show_languages(call):
-    user_lang = data_manager.get_user_settings(call.message.chat.id)['language']
-    
-    markup = types.InlineKeyboardMarkup()
-    markup.row(
-        types.InlineKeyboardButton("Русский", callback_data="set_lang_ru"),
-        types.InlineKeyboardButton("English", callback_data="set_lang_en")
-    )
-    markup.row(
-        types.InlineKeyboardButton("Українська", callback_data="set_lang_uk"),
-        types.InlineKeyboardButton(LANGUAGES[user_lang]['back_button'], callback_data="back_to_settings")
-    )
-    
+    user_lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    for code, meta in LANGUAGES.items():
+        kb.add(types.InlineKeyboardButton(meta.get('language_name', 'code.upper'),
+                                          callback_data=f"setlang:{code}"))
+    kb.add(types.InlineKeyboardButton(LANGUAGES[user_lang]['back_button'], callback_data="back_to_settings"))
+
     bot.edit_message_text(
         LANGUAGES[user_lang]['language_title'],
         call.message.chat.id,
         call.message.message_id,
-        reply_markup=markup
+        reply_markup=kb
     )
+    bot.answer_callback_query(call.id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("setlang:"))
+def set_language_handler(call):
+    try:
+        new_lang = call.data.split(":", 1)[1]
+        data_manager.update_user_setting(call.message.chat.id, 'language', new_lang)
+
+        # лёгкая тост-нотификация и возврат в настройки
+        bot.answer_callback_query(call.id, LANGUAGES[new_lang]['language_changed'])
+
+        # перерисовываем экран настроек (используй готовую функцию)
+        handle_back_to_settings(call)
+    except Exception as e:
+        logger.error(f"Language error: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
+
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_lang_"))
