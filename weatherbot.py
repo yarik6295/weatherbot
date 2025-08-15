@@ -23,6 +23,7 @@ import gc
 from threading import Lock
 from collections import defaultdict
 import socket
+from typing import Any
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -235,7 +236,8 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ лишком длинное название города",
         'invalid_city_chars': "⚠️ Недопустимые символы в названии города",
         'weather_not_found': "⚠️ Не удалось получить погоду для этого места",
-        'broadcast_restart': "⚠️ Внимание! Для обновления бота, пожалуйста, перезапустите его (отправьте /start или напишите любое сообщение). Спасибо!"
+        'broadcast_restart': "⚠️ Внимание! Для обновления бота, пожалуйста, перезапустите его (отправьте /start). Спасибо!",
+        'forecast_24h_title': "🌤️ Прогноз на 24 часа в городе {city}:",
         
     },
     'en': {
@@ -367,7 +369,8 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ City name is too long",
         'invalid_city_chars': "⚠️ Invalid characters in city name",
         'weather_not_found': "⚠️ Could not get weather for this location",
-        'broadcast_restart': "⚠️ Attention! To update the bot, please restart it (send /start or any message). Thank you!"
+        'broadcast_restart': "⚠️ Attention! To update the bot, please restart it (send /start). Thank you!",
+        'forecast_24h_title': "🌤️ 24-hour forecast in {city}:",
         
     },
     'uk': {
@@ -499,7 +502,8 @@ LANGUAGES = {
         'city_name_too_long': "⚠️ Занадто довга назва міста",
         'invalid_city_chars': "⚠️ Недопустимі символи в назві міста",
         'weather_not_found': "⚠️ Не вдалося отримати погоду для цього місця",
-        'broadcast_restart': "⚠️ Увага! Для оновлення бота, будь ласка, перезапустіть його (надішліть /start або будь-яке повідомлення). Дякуємо!"
+        'broadcast_restart': "⚠️ Увага! Для оновлення бота, будь ласка, перезапустіть його (надішліть /start). Дякуємо!",
+        'forecast_24h_title': "🌤️ 24-годинний прогноз в {city}:",
     
     }
 }
@@ -796,7 +800,173 @@ WEATHER_CACHE_TTL = 300  # 5 минут
 USER_RATE_LIMIT = 20  # сообщений в минуту
 _user_msg_times = defaultdict(list)
 
-ADMIN_CHAT_ID = 1479352212
+# 1. Конфигурация безопасности
+SECURITY_CONFIG = {
+    'max_cities_per_user': 15,
+    'max_msg_length': 4096,
+    'rate_limit_window': 60,  # seconds
+    'max_requests_per_window': 20,
+    'max_city_name_length': 100,
+    'allowed_chars': set(
+        'abcdefghijklmnopqrstuvwxyz'  # английские буквы
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ'  
+        'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'  # русские буквы
+        'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
+        'абвгґдеєжзиіїйклмнопрстуфхцчшщьюя'  # украинские буквы
+        'АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯ'
+        '0123456789'  # цифры
+        "'" 
+        ' -'),
+    'min_location_update_interval': 60,  # seconds
+    'max_forecast_days': 5
+}
+
+# 2. Перенос чувствительных данных в env
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))  # Заменить на env
+MAX_CITY_LENGTH = int(os.getenv("MAX_CITY_LENGTH", "100"))
+RATE_LIMIT = int(os.getenv("RATE_LIMIT", "20"))
+
+# 3. Валидаторы входных данных
+def validate_city_name(city: str) -> bool:
+    """Проверка корректности названия города"""
+    if not city or not isinstance(city, str):
+        return False
+    if len(city) > SECURITY_CONFIG['max_city_name_length']:
+        return False
+    return all(c in SECURITY_CONFIG['allowed_chars'] for c in city.lower())
+
+def validate_coordinates(lat: float, lon: float) -> bool:
+    """Проверка корректности координат"""
+    try:
+        return -90 <= float(lat) <= 90 and -180 <= float(lon) <= 180
+    except (ValueError, TypeError):
+        return False
+
+def validate_date_str(date_str: str) -> bool:
+    """Проверка корректности даты"""
+    try:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+        today = datetime.now()
+        max_date = today + timedelta(days=SECURITY_CONFIG['max_forecast_days'])
+        return today <= date <= max_date
+    except ValueError:
+        return False
+
+# 4. Улучшенный rate limiter
+class RateLimiter:
+    def __init__(self):
+        self.requests = defaultdict(list)
+        self.locks = defaultdict(Lock)
+
+    def can_make_request(self, user_id: int) -> bool:
+        with self.locks[user_id]:
+            now = time.time()
+            self.requests[user_id] = [
+                req_time for req_time in self.requests[user_id]
+                if now - req_time < SECURITY_CONFIG['rate_limit_window']
+            ]
+            if len(self.requests[user_id]) >= SECURITY_CONFIG['max_requests_per_window']:
+                return False
+            self.requests[user_id].append(now)
+            return True
+
+    def cleanup(self):
+        """Очистка старых записей"""
+        now = time.time()
+        for user_id in list(self.requests.keys()):
+            with self.locks[user_id]:
+                self.requests[user_id] = [
+                    req_time for req_time in self.requests[user_id]
+                    if now - req_time < SECURITY_CONFIG['rate_limit_window']
+                ]
+                if not self.requests[user_id]:
+                    del self.requests[user_id]
+                    del self.locks[user_id]
+
+# 5. Безопасная отправка сообщений
+def safe_send_message(chat_id: int, text: str, **kwargs) -> Optional[types.Message]:
+    """Безопасная отправка сообщений с обработкой ошибок"""
+    try:
+        if not isinstance(chat_id, int) or chat_id <= 0:
+            logger.error(f"Invalid chat_id: {chat_id}")
+            return None
+
+        if not text:
+            logger.error("Empty message text")
+            return None
+
+        if len(text) > SECURITY_CONFIG['max_msg_length']:
+            text = text[:SECURITY_CONFIG['max_msg_length']-3] + "..."
+
+        return bot.send_message(chat_id, text, **kwargs)
+    except telebot.apihelper.ApiException as e:
+        if e.result.status_code == 403:
+            logger.info(f"User {chat_id} blocked the bot")
+            data_manager.collection.delete_one({"chat_id": chat_id})
+        else:
+            logger.error(f"Telegram API error: {e}")
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
+    return None
+
+# 6. Безопасная обработка геолокации
+def safe_process_location(location: types.Location) -> Optional[tuple]:
+    """Безопасная обработка геолокации"""
+    try:
+        if not hasattr(location, 'latitude') or not hasattr(location, 'longitude'):
+            return None
+        
+        lat, lon = float(location.latitude), float(location.longitude)
+        if not validate_coordinates(lat, lon):
+            return None
+            
+        return (lat, lon)
+    except Exception as e:
+        logger.error(f"Location processing error: {e}")
+        return None
+
+# 7. Безопасная работа с MongoDB
+def safe_update_user_setting(chat_id: int, key: str, value: Any) -> bool:
+    """Безопасное обновление настроек пользователя"""
+    try:
+        allowed_keys = {
+            'language', 'notifications', 'timezone', 
+            'saved_cities', 'notification_time', 'notification_city'
+        }
+        if key not in allowed_keys:
+            logger.error(f"Attempt to update invalid setting: {key}")
+            return False
+            
+        # Валидация значений
+        if key == 'saved_cities' and (
+            not isinstance(value, list) or 
+            len(value) > SECURITY_CONFIG['max_cities_per_user']
+        ):
+            return False
+            
+        if key == 'language' and value not in LANGUAGES:
+            return False
+            
+        data_manager.update_user_setting(chat_id, key, value)
+        return True
+    except Exception as e:
+        logger.error(f"Settings update error: {e}")
+        return False
+
+# 8. Создаем экземпляр rate limiter
+rate_limiter = RateLimiter()
+
+# 9. Периодическая очистка
+def cleanup_tasks():
+    """Периодическая очистка кэшей и временных данных"""
+    try:
+        rate_limiter.cleanup()
+        gc.collect()
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
+
+# Добавляем задачу очистки в планировщик
+schedule.every(5).minutes.do(cleanup_tasks)
 
 @bot.message_handler(commands=['broadcast'])
 def cmd_broadcast(msg):
@@ -1359,23 +1529,24 @@ def set_notification_city(call):
 @bot.message_handler(content_types=['location'])
 def handle_location(msg):
     try:
-        if not msg.location:
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings.get('language', 'ru')
+        
+        if not rate_limiter.can_make_request(msg.chat.id):
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['rate_limit_message'])
             return
             
-        settings = data_manager.get_user_settings(msg.chat.id)
-        lang = settings['language']
-        
-        # Создаем объект Location для передачи в process_new_city
-        class Location:
-            def __init__(self, lat, lon):
-                self.latitude = lat
-                self.longitude = lon
-                
-        location_obj = Location(msg.location.latitude, msg.location.longitude)
-        process_new_city(msg, city=location_obj)
+        coords = safe_process_location(msg.location)
+        if not coords:
+            safe_send_message(msg.chat.id, LANGUAGES[lang]['location_error'])
+            return
+            
+        lat, lon = coords
+        # Просто передаем координаты напрямую в process_new_city
+        process_new_city(msg, {'latitude': lat, 'longitude': lon})
         
     except Exception as e:
-        logger.error(f"Error in handle_location: {e}")
+        logger.error(f"Location handler error: {e}")
         
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['share_button'] for lang in LANGUAGES.keys()))
 def handle_share_button(msg):
@@ -1484,6 +1655,40 @@ def handle_chart_city(call):
     bot.send_message(call.message.chat.id, LANGUAGES[lang]['select_date_chart'], reply_markup=markup)
     bot.answer_callback_query(call.id)
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("chartdate_"))
+def handle_chart_date(call):
+    try:
+        _, city, date_str = call.data.split("_", 2)
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        forecast_data = weather_api.get_forecast(city, lang)
+        if not forecast_data or 'list' not in forecast_data:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            bot.answer_callback_query(call.id)
+            return
+
+        chart_buffer = ChartGenerator.create_weather_chart_for_day(forecast_data, city, lang, date_str)
+        if chart_buffer:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+            now = datetime.now()
+            if selected_date.date() == now.date():
+                caption = f"📊 {LANGUAGES[lang].get('weather_chart', 'График температуры')} — {city} (24ч)"
+            else:
+                weekday = LANGUAGES[lang]['weekdays'][selected_date.weekday()]
+                caption = f"📊 {LANGUAGES[lang].get('weather_chart', 'График температуры')} — {city} ({date_str}, {weekday})"
+            
+            bot.send_photo(
+                call.message.chat.id,
+                chart_buffer,
+                caption=caption
+            )
+        else:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error="Chart generation failed"))
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_chart_date: {e}")
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))    
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastcity_"))
 def handle_forecast_city(call):
@@ -1523,40 +1728,38 @@ def show_forecast_options(msg):
 # --- После handle_chart_city ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
 def handle_forecast_date(call):
-    _, city, date_str = call.data.split("_", 2)
-    settings = data_manager.get_user_settings(call.message.chat.id)
-    lang = settings['language']
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    
-    forecast_data = weather_api.get_forecast(city, lang)
-    selected_date = datetime.strptime(date_str, "%Y-%m-%d")
-    now = datetime.now()
-    if selected_date.date() == now.date():
-        # Прогноз с текущего времени на 24 часа вперед
-        start_ts = now.timestamp()
-        end_ts = (now + timedelta(hours=24)).timestamp()
-        filtered_points = [
-            item for item in forecast_data['list']
-            if start_ts <= item['dt'] < end_ts
-        ]
-    else:
-        # Для других дат: все точки за выбранный день
-        filtered_points = [
-            item for item in forecast_data['list'] 
-            if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
-        ]
-    # Формируем сообщение прогноза
-    if not filtered_points:
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
-    else:
-        weekday = LANGUAGES[lang]['weekdays'][selected_date.weekday()]
-        date_human = selected_date.strftime('%d.%m.%Y')
-        header = LANGUAGES[lang]['forecast_title'].format(
-            icon="🌤️",
-            city=city,
-            date=f"{date_human} ({weekday})"
-        ) + "\n\n"
-        message = ""
+    try:
+        _, city, date_str = call.data.split("_", 2)
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings['language']
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        forecast_data = weather_api.get_forecast(city, lang)
+        if not forecast_data or 'list' not in forecast_data:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        selected_date = datetime.strptime(date_str, "%Y-%m-%d")
+        now = datetime.now()
+        if selected_date.date() == now.date():
+            date_from = now
+            date_to = now + timedelta(hours=24)
+            filtered_points = [
+                item for item in forecast_data['list']
+                if date_from.timestamp() <= item['dt'] < date_to.timestamp()
+            ]
+            header = LANGUAGES[lang]['forecast_24h_title'].format(city=city)
+        else:
+            filtered_points = [
+                item for item in forecast_data['list'] 
+                if datetime.fromtimestamp(item['dt']).strftime('%Y-%m-%d') == date_str
+            ]
+            weekday = LANGUAGES[lang]['weekdays'][selected_date.weekday()]
+            date_human = selected_date.strftime('%d.%m.%Y')
+            header = LANGUAGES[lang]['forecast_title'].format(
+                icon="🌤️",
+                city=city,
+                date=f"{date_human} ({weekday})"
+            )
+        message = header + "\n\n"
         for item in filtered_points:
             dt = datetime.fromtimestamp(item['dt'])
             hour = dt.strftime('%H')
@@ -1570,8 +1773,13 @@ def handle_forecast_date(call):
                 desc=desc,
                 temp=temp
             ) + "\n"
-        safe_send_message(call.message.chat.id, header + message)
-    bot.answer_callback_query(call.id)
+        if not filtered_points:
+            message += LANGUAGES[lang]['not_found']
+        safe_send_message(call.message.chat.id, message)
+        bot.answer_callback_query(call.id)
+    except Exception as e:
+        logger.error(f"Error in handle_forecast_date: {e}")
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))
 
 # --- После handle_forecast_date ---
 def send_forecast_for_date(chat_id: int, city: str, lang: str, selected_date: str):
@@ -1650,12 +1858,39 @@ def show_city_forecast(call):
         city = call.data.split('_', 1)[1]
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        # Берём сегодняшнюю дату
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        send_forecast_for_date(call.message.chat.id, city, lang, today_str)
+        now = datetime.now()
+        date_from = now
+        date_to = now + timedelta(hours=24)
+        forecast_data = weather_api.get_forecast(city, lang)
+        if not forecast_data or 'list' not in forecast_data:
+            safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
+            return
+        filtered_points = [
+            item for item in forecast_data['list']
+            if date_from.timestamp() <= item['dt'] < date_to.timestamp()
+        ]
+        header = LANGUAGES[lang]['forecast_24h_title'].format(city=city)
+        message = header + "\n\n"
+        for item in filtered_points:
+            dt = datetime.fromtimestamp(item['dt'])
+            hour = dt.strftime('%H')
+            temp = round(item['main']['temp'])
+            desc = item['weather'][0]['description']
+            desc = desc[0].upper() + desc[1:] if desc else desc
+            icon = get_weather_icon(item['weather'][0]['description'])
+            message += LANGUAGES[lang]['hourly'].format(
+                hour=hour,
+                icon=icon,
+                desc=desc,
+                temp=temp
+            ) + "\n"
+        if not filtered_points:
+            message += LANGUAGES[lang]['not_found']
+        safe_send_message(call.message.chat.id, message)
         bot.answer_callback_query(call.id)
     except Exception as e:
         logger.error(f"Error in show_city_forecast: {e}")
+        safe_send_message(call.message.chat.id, LANGUAGES[lang]['error'].format(error=str(e)))
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('chart_'))
 def send_weather_chart(call):
