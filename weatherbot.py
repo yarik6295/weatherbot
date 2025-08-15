@@ -1225,6 +1225,7 @@ def cmd_start(msg):
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_lang_menu")
 def show_language_menu(call):
+    lang = call.data.split('_')[3]
     try:
         # Получаем текущие настройки с защитой от ошибок
         try:
@@ -1268,6 +1269,7 @@ def show_language_menu(call):
                 reply_markup=lang_markup
             )
             
+        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])    
         # Всегда подтверждаем нажатие кнопки
         bot.answer_callback_query(call.id)
 
