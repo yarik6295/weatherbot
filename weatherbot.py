@@ -168,12 +168,7 @@ LANGUAGES = {
         'enter_notification_time_full': "🕐 Введите время для уведомлений в формате ЧЧ:ММ (например, 08:30):",
         'notifications_scheduled': "🔔 🕐 Уведомления будут приходить в {time}",
         'invalid_time_format_full': "❌ Неверный формат времени. Используйте ЧЧ:ММ",
-        'choose_language': "🌍 Выберите язык:",
         'help_full': "🤖 *MeteoBox📦🌦️ - Помощь*\n\n🌤️ *Основные функции:*\n• Текущая погода с подробной информацией\n• Прогноз погоды на несколько дней\n• Графики температуры\n• Погодные предупреждения\n• До 5 сохраненных городов\n• Автоматические уведомления\n\n📱 *Как пользоваться:*\n• Отправьте геолокацию или название города\n• Используйте кнопки для быстрого доступа\n• Настройте уведомления в настройках\n• Добавляйте города в избранное\n\n🔧 *Команды:*\n/start - Запуск бота\n/help - Эта справка\n\n💡 *Совет:* Добавьте несколько городов для быстрого доступа к прогнозу!",
-        'city_tokyo': "Токио",
-        'city_london': "Лондон",
-        'city_washington': "Вашингтон",
-        'city_newyork': "Нью-Йорк",
         'alert_hot': "{icon} Очень жарко! Температура: {temp}°C",
         'alert_cold': "{icon} Очень холодно! Температура: {temp}°C",
         'alert_wind': "{icon} Сильный ветер: {wind} м/с",
@@ -182,7 +177,7 @@ LANGUAGES = {
         'share_button': "🌟 Рекомендовать бота", 
         'share_message': "Попробуйте этого бота для погоды — он присылает точные прогнозы и уведомления: 👇",  
         'language_tab': "🌐 Язык",
-        'language_title': "Выберите язык:",
+        'language_title': "🌐 Выберите язык:\n",
         'current_language': "Текущий язык: Русский",
         'language_changed': "✅ Язык изменен на Русский",
         'settings_title': "⚙️ Настройки",
@@ -216,7 +211,6 @@ LANGUAGES = {
         'or_text': "или",
         'enter_city_manual': "введите название города вручную",
         'language_name': 'Русский',
-        'choose_language': "Выберите язык:",
         'feels_like': "(ощущается как {feels}°C)",
         'humidity': "💧 Влажность: {humidity}%",
         'pressure': "📊 Давление: {pressure} гПа",
@@ -301,12 +295,7 @@ LANGUAGES = {
         'enter_notification_time_full': "🕐 Enter notification time in HH:MM format (e.g., 08:30):",
         'notifications_scheduled': "🔔 Notifications will be sent at {time}",
         'invalid_time_format_full': "❌ Invalid time format. Use HH:MM",
-        'choose_language': "🌍 Choose language:",
         'help_full': "🤖 *MeteoBox📦🌦️ - Help*\n\n🌤️ *Main features:*\n• Current weather with details\n• Weather forecast for several days\n• Temperature charts\n• Weather alerts\n• Up to 5 saved cities\n• Automatic notifications\n\n📱 *How to use:*\n• Send your location or city name\n• Use buttons for quick access\n• Set up notifications in settings\n• Add cities to favorites\n\n🔧 *Commands:*\n/start - Start bot\n/help - This help\n\n💡 *Tip:* Add several cities for quick access to the forecast!",
-        'city_tokyo': "Tokyo",
-        'city_london': "London",
-        'city_washington': "Washington",
-        'city_newyork': "New York",
         'alert_hot': "{icon} Very hot! Temperature: {temp}°C",
         'alert_cold': "{icon} Very cold! Temperature: {temp}°C",
         'alert_wind': "{icon} Strong wind: {wind} m/s",
@@ -315,7 +304,7 @@ LANGUAGES = {
         'share_button': "🌟 Share Bot",  
         'share_message': "Try this weather bot — it sends accurate forecasts and alerts: 👇",  
         'language_tab': "🌐 Language", 
-        'language_title': "Select language:",
+        'language_title': "🌐 Choose language:\n",
         'current_language': "Current language: English",
         'language_changed': "✅ Language changed to English",
         'settings_title': "⚙️ Settings",
@@ -349,7 +338,6 @@ LANGUAGES = {
         'or_text': "or",
         'enter_city_manual': "enter city name manually",
         'language_name': 'English',
-        'choose_language': "Select language:",
         'feels_like': "(feels like {feels}°C)",
         'humidity': "💧 Humidity: {humidity}%",
         'pressure': "📊 Pressure: {pressure} hPa",
@@ -374,7 +362,7 @@ LANGUAGES = {
         
     },
     'uk': {
-        'weekdays': ['понеділок', 'вівторок', 'середа', 'четвер', 'пятниця', 'субота', 'неділя'],
+        'weekdays': ['понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота', 'неділя'],
         'welcome': "👋 *Ласкаво просимо до MeteoBox📦🌦️!*\n"
             "📌 Як користуватись:\n"
             "1️⃣ Надішліть 📍 геолокацію або введіть назву міста\n"
@@ -434,12 +422,7 @@ LANGUAGES = {
         'enter_notification_time_full': "🕐 Введіть час для сповіщень у форматі ГГ:ХХ (наприклад, 08:30):",
         'notifications_scheduled': "🔔 Сповіщення будуть надсилатися о {time}",
         'invalid_time_format_full': "❌ Неправильний формат часу. Використовуйте ГГ:ХХ",
-        'choose_language': "🌍 Оберіть мову:",
         'help_full': "🤖 *MeteoBox📦🌦️ - Довідка*\n\n🌤️ *Основні функції:*\n• Поточна погода з деталями\n• Прогноз погоди на кілька днів\n• Графіки температури\n• Погодні попередження\n• До 5 збережених міст\n• Автоматичні сповіщення\n\n📱 *Як користуватись:*\n• Надішліть геолокацію або назву міста\n• Використовуйте кнопки для швидкого доступу\n• Налаштуйте сповіщення в налаштуваннях\n• Додавайте міста в обране\n\n🔧 *Команди:*\n/start - Запуск бота\n/help - Ця довідка\n\n💡 *Порада:* Додайте кілька міст для швидкого доступу до прогнозу!",
-        'city_tokyo': "Токіо",
-        'city_london': "Лондон",
-        'city_washington': "Вашингтон",
-        'city_newyork': "Нью-Йорк",
         'alert_hot': "{icon} Дуже спекотно! Температура: {temp}°C",
         'alert_cold': "{icon} Дуже холодно! Температура: {temp}°C",
         'alert_wind': "{icon} Сильний вітер: {wind} м/с",
@@ -448,7 +431,7 @@ LANGUAGES = {
         'share_button': "🌟 Порекомендувати бота",  
         'share_message': "Спробуйте цього бота для погоди — він надсилає точні прогнози та сповіщення: 👇",
         'language_tab': "🌐 Мова",
-        'language_title': "Оберіть мову:",
+        'language_title': "🌐 Оберіть мову:\n",
         'current_language': "Поточна мова: Українська",
         'language_changed': "✅ Мову змінено на Українську",
         'settings_title': "⚙️ Налаштування",
@@ -482,7 +465,6 @@ LANGUAGES = {
         'or_text': "або",
         'enter_city_manual': "введіть назву міста вручну",
         'language_name': 'Українська',
-        'choose_language': "Оберіть мову:",
         'feels_like': "(відчувається як {feels}°C)",
         'humidity': "💧 Вологість: {humidity}%",
         'pressure': "📊 Тиск: {pressure} гПа",
@@ -1214,7 +1196,7 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
 def cmd_start(msg):
     try:
         if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
+            safe_send_message(msg.chat.id, "Too many requests. Please wait a moment before trying again.")
             return
         # Устанавливаем дефолтные настройки
         defaults = {
@@ -1233,15 +1215,14 @@ def cmd_start(msg):
         lang_markup = types.InlineKeyboardMarkup()
         lang_markup.add(
             types.InlineKeyboardButton(
-                "🌐 Выбрать язык / Choose language",
+                "🌐 Choose language",
                 callback_data="show_lang_menu"
             )
         )
 
         bot.send_message(
             msg.chat.id,
-            "👋 Добро пожаловать в MeteoBox📦🌦️!\n\n"
-            "Пожалуйста, сначала выберите язык:",
+            LANGUAGES['en']['welcome'],
             reply_markup=lang_markup
         )
 
@@ -1273,8 +1254,8 @@ def show_language_menu(call):
 
         # Безопасное получение текста для сообщения
         menu_text = LANGUAGES.get(current_lang, {}).get(
-            'choose_language', 
-            "Выберите язык / Choose language:"
+            'language_title', 
+            "Choose language:"
         )
 
         # Редактируем сообщение с обработкой ошибок
@@ -1624,12 +1605,7 @@ def show_chart_options(msg):
     settings = data_manager.get_user_settings(msg.chat.id)
     lang = settings['language']
     saved_cities = settings.get('saved_cities', [])
-    cities = saved_cities if saved_cities else [
-        LANGUAGES[lang]['city_tokyo'],
-        LANGUAGES[lang]['city_london'],
-        LANGUAGES[lang]['city_washington'],
-        LANGUAGES[lang]['city_newyork']
-    ]
+    cities = saved_cities
     markup = types.InlineKeyboardMarkup(row_width=2)
     for city in cities:
         markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
@@ -2558,44 +2534,6 @@ def process_notification_time(msg):
 
     except Exception as e:
         logger.error(f"Error in process_notification_time: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data == "change_language")
-def change_language_menu(call):
-    try:
-        bot.answer_callback_query(call.id)
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        markup = types.InlineKeyboardMarkup(row_width=3)
-        buttons = []
-        for code in LANGUAGES.keys():
-            buttons.append(types.InlineKeyboardButton(
-                code.upper(), callback_data=f"setlang_{code}"
-            ))
-        markup.add(*buttons)
-
-        safe_send_message(
-            call.message.chat.id,
-            LANGUAGES[lang]['choose_language'],
-            reply_markup=markup
-        )
-
-    except Exception as e:
-        logger.error(f"Error in change_language_menu: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('setlang_'))
-def change_language(call):
-    try:
-        new_lang = call.data.split('_')[1]
-        data_manager.update_user_setting(call.message.chat.id, 'language', new_lang)
-        safe_send_message(
-            call.message.chat.id,
-            LANGUAGES[new_lang]['language_changed'].format(lang=new_lang.upper()),
-            reply_markup=create_main_keyboard(new_lang)
-        )
-        show_settings(call.message)  # Обновить меню
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in change_language: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "clear_cities")
 def clear_all_cities(call):
