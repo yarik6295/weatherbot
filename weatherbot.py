@@ -108,10 +108,11 @@ LANGUAGES = {
     'ru': {
         'weekdays': ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
         'welcome': "👋 Приветствуем в *MeteoBox*📦🌦️!\n"
-            "📌 Как пользоваться:\n"
-            "1️⃣ Отправьте геолокацию или введите название города\n"
-            "2️⃣ Используйте кнопки для просмотра прогноза и графиков\n"
-            "3️⃣ Настройте уведомления в настройках\n\n",
+          "📌 Как пользоваться:\n"
+          "1️⃣ Отправьте геолокацию или введите название города\n"
+          "2️⃣ Используйте кнопки для просмотра прогноза и графиков\n"
+          "3️⃣ Настройте уведомления в настройках\n\n",
+
         'ask_location': "📍 Отправьте геолокацию или введите название города:",
         'forecast_button': "🌦️ Прогноз",
         'cities_button': "🏙️ Мои города",
@@ -129,19 +130,11 @@ LANGUAGES = {
         'current_weather': "🌡️ *Сейчас:* {temp}°C (ощущается {feels}°C)\n{icon} {desc}\n💧 Влажность: {humidity}%\n💨 Ветер: {wind} м/с\n👁️ Видимость: {visibility} км",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
-        'alerts': "🚨 *Предупреждения:*\n{alerts}",
-        'no_alerts': "✅ Без предупреждений",
         'not_found': "⚠️ Город не найден. Попробуйте снова.",
         'error': "❌ Ошибка: {error}",
-        'confirm_clear_all': "⚠️ Вы уверены, что хотите удалить все сохраненные города?",
-        'confirm_clear_all_yes': "✅ Да, удалить",
-        'cancel': "❌ Отмена",
-        'cancelled': "❌ Отменено",
         'invalid_time_format': "❌ Неверный формат времени. Используйте ЧЧ:ММ",
         'enter_city': "📍 Введите название города:",
         'enter_notification_time': "🕐 Введите время для уведомлений (ЧЧ:ММ):",
-        'all_cities_removed': "🗑️ Все города удалены",
-        'clear_cities_button': "🗑️ Очистить города",
         'city_added': "✅ Город {city} добавлен",
         'city_removed': "🗑️ Город {city} удален",
         'max_cities': "⚠️ Максимум 15 сохраненных городов",
@@ -233,11 +226,17 @@ LANGUAGES = {
     },
     'en': {
         'weekdays': ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+        'welcome_first': "👋 Welcome to MeteoBox📦🌦️!\n"
+            "📌 How to use:\n"
+            "1️⃣ Choose a language\n"
+            "2️⃣ Send your location or enter the name of a city\n"
+            "3️⃣ Use the buttons to view forecasts and charts\n"
+            "4️⃣ Set up notifications in the settings\n\n",
         'welcome': "👋 Welcome to *MeteoBox*📦🌦️!\n"
             "📌 How to use:\n"
             "1️⃣ Send your location or enter a city name\n"
-            "2️⃣ Use buttons for quick access to forecast and charts\n"
-            "3️⃣ Set up notifications in settings\n\n",
+            "2️⃣ Use the buttons to view forecasts and charts\n"
+            "3️⃣ Set up notifications in the settings\n\n",
         'ask_location': "📍 Send your location or enter a city name:",
         'forecast_button': "🌦️ Forecast",
         'cities_button': "🌆 My Cities",
@@ -255,19 +254,11 @@ LANGUAGES = {
         'current_weather': "🌡️ *Now:* {temp}°C (feels like {feels}°C)\n{icon} {desc}\n💧 Humidity: {humidity}%\n💨 Wind: {wind} m/s\n👁️ Visibility: {visibility} km",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *Today:* {min}°C → {max}°C",
-        'alerts': "🚨 *Weather Alerts:*\n{alerts}",
-        'no_alerts': "✅ No alerts",
         'not_found': "⚠️ City not found. Try again.",
         'error': "❌ Error: {error}",
-        'confirm_clear_all': "⚠️ Are you sure you want to delete all saved cities?",
-        'confirm_clear_all_yes': "✅ Yes, clear",
-        'cancel': "❌ Cancel",
-        'cancelled': "❌ Cancelled",
         'invalid_time_format': "❌ Invalid time format. Use HH:MM",
         'enter_city': "📍 Enter city name:",
         'enter_notification_time': "🕐 Enter notification time (HH:MM):",
-        'all_cities_removed': "🗑️ All cities removed",
-        'clear_cities_button': "🗑️ Clear cities",
         'city_added': "✅ City {city} added",
         'city_removed': "🗑️ City {city} removed",
         'max_cities': "⚠️ Maximum 15 saved cities",
@@ -359,11 +350,11 @@ LANGUAGES = {
     },
     'uk': {
         'weekdays': ['понеділок', 'вівторок', 'середа', 'четвер', "п'ятниця", 'субота', 'неділя'],
-        'welcome': "👋 Ласкаво просимо до *MeteoBox*📦🌦️!\n"
-            "📌 Як користуватись:\n"
-            "1️⃣ Надішліть геолокацію або введіть назву міста\n"
-            "2️⃣ Використовуйте кнопки для швидкого доступу до прогнозу та графіків\n"
-            "3️⃣ Налаштуйте сповіщення в налаштуваннях\n\n",
+        'welcome': "👋 Вітаємо в *MeteoBox*📦🌦️!\n"
+          "📌 Як користуватися:\n"
+          "1️⃣ Надішліть геолокацію або введіть назву міста\n"
+          "2️⃣ Використовуйте кнопки для перегляду прогнозу та графіків\n"
+          "3️⃣ Налаштуйте сповіщення в налаштуваннях\n\n",
         'ask_location': "📍 Надішліть геолокацію або введіть назву міста:",
         'forecast_button': "🌦️ Прогноз",
         'cities_button': "🌆 Мої міста",
@@ -381,19 +372,11 @@ LANGUAGES = {
         'current_weather': "🌡️ *Зараз:* {temp}°C (відчувається {feels}°C)\n{icon} {desc}\n💧 Вологість: {humidity}%\n💨 Вітер: {wind} м/с\n👁️ Видимість: {visibility} км",
         'hourly': "🕐 {hour}:00 — {icon} {desc}, {temp}°C",
         'daily_summary': "\n📊 *За день:* {min}°C → {max}°C",
-        'alerts': "🚨 *Попередження:*\n{alerts}",
-        'no_alerts': "✅ Без попереджень",
         'not_found': "⚠️ Місто не знайдено. Спробуйте ще раз.",
         'error': "❌ Помилка: {error}",
-        'confirm_clear_all': "⚠️ Ви впевнені, що хочете видалити всі збережені міста?",
-        'confirm_clear_all_yes': "✅ Так, очистити",
-        'cancel': "❌ Скасування",
-        'cancelled': "❌ Скасовано",
         'invalid_time_format': "❌ Неправильний формат часу. Використовуйте ГГ:ХХ",
         'enter_city': "📍 Введіть назву міста:",
         'enter_notification_time': "🕐 Введіть час для сповіщень у форматі ГГ:ХХ (наприклад, 08:30):",
-        'all_cities_removed': "🗑️ Усі міста видалені",
-        'clear_cities_button': "🗑️ Очистити міста",
         'city_added': "✅ Місто {city} додано",
         'city_removed': "🗑️ Місто {city} видалено",
         'max_cities': "⚠️ Максимум 15 збережених міст",
@@ -943,7 +926,7 @@ def cmd_start(msg):
 
         bot.send_message(
             msg.chat.id,
-            LANGUAGES['en']['welcome'],
+            LANGUAGES['en']['welcome_first'],
             reply_markup=lang_markup
         )
 
@@ -2226,43 +2209,6 @@ def process_notification_time(msg):
 
     except Exception as e:
         logger.error(f"Error in process_notification_time: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data == "clear_cities")
-def clear_all_cities(call):
-    try:
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton(LANGUAGES[lang]['confirm_clear_all_yes'], callback_data="confirm_clear"),
-            types.InlineKeyboardButton(LANGUAGES[lang]['cancel'], callback_data="cancel_clear")
-        )
-
-        safe_send_message(
-            call.message.chat.id,
-            LANGUAGES[lang]['confirm_clear_all'],
-            reply_markup=markup
-        )
-        bot.answer_callback_query(call.id)
-
-    except Exception as e:
-        logger.error(f"Error in clear_all_cities: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data in ["confirm_clear", "cancel_clear"])
-def handle_clear_confirmation(call):
-    try:
-        settings = data_manager.get_user_settings(call.message.chat.id)
-        lang = settings['language']
-        if call.data == "confirm_clear":
-            data_manager.update_user_setting(call.message.chat.id, 'saved_cities', [])
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['all_cities_removed'])
-        else:
-            safe_send_message(call.message.chat.id, LANGUAGES[lang]['cancelled'])
-
-        bot.answer_callback_query(call.id)
-
-    except Exception as e:
-        logger.error(f"Error in handle_clear_confirmation: {e}")
 
 @bot.message_handler(commands=['help'])
 def cmd_help(msg):
