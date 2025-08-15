@@ -998,8 +998,9 @@ def set_initial_language(call):
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_settings")
-def handle_back_to_settings(call):
+def handle_back_to_settings(call, message):
     try:
+        saved_cities = settings.get('saved_cities', [])
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         
@@ -1015,10 +1016,18 @@ def handle_back_to_settings(call):
             types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
         )
 
-        bot.edit_message_text(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            text=LANGUAGES[lang]['settings_title'],
+        settings_text = LANGUAGES[lang]['settings_menu'].format(
+            notifications="вкл" if settings.get('notifications', False) else "выкл",
+            time=settings.get('notification_time', '--:--'),
+            lang=lang.upper(),
+            cities=len(saved_cities),
+            timezone=settings.get('timezone', 'UTC')
+        )
+        
+        bot.send_message(
+            chat_id=message.chat.id,
+            text=settings_text,
+            parse_mode="Markdown",
             reply_markup=markup
         )
         
