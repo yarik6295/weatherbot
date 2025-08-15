@@ -49,7 +49,7 @@ def self_ping():
             print(f"[PING] Successfully pinged {url}")
         except Exception as e:
             print(f"[PING] Error: {e}")
-        time.sleep(300)  # каждые 5 минут
+        time.sleep(300)
 
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -747,8 +747,6 @@ WEATHER_CACHE_TTL = 300
 USER_RATE_LIMIT = 20 
 _user_msg_times = defaultdict(list)
 
-
-# 2. Перенос чувствительных данных в env
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
 
 
@@ -774,73 +772,7 @@ def cmd_broadcast(msg):
     logger.info(f"Broadcast finished. Sent: {count}, Errors: {errors}")
     bot.send_message(msg.chat.id, f"Рассылка завершена. Отправлено: {count}, ошибок: {errors}")
 
-def cleanup_resources():
-    try:
-        gc.collect()
-        plt.close('all')
-    except Exception as e:
-        logger.error(f"Cleanup error: {e}")
 
-# Запускать периодически
-schedule.every(30).minutes.do(cleanup_resources)
-
-def verify_environment():
-    required_vars = {
-        'BOT_TOKEN': os.getenv('BOT_TOKEN'),
-        'OWM_API_KEY': os.getenv('OWM_API_KEY'),
-        'MONGO_CONNECTION_STRING': os.getenv('MONGO_CONNECTION_STRING')
-    }
-    
-    missing = [k for k, v in required_vars.items() if not v]
-    if missing:
-        logger.error(f"Missing environment variables: {', '.join(missing)}")
-        return False
-        
-    return True
-
-def test_api_connection():
-    try:
-        test_city = "London"
-        response = requests.get(
-            f"https://api.openweathermap.org/data/2.5/forecast",
-            params={
-                'q': test_city,
-                'appid': OWM_API_KEY,
-                'units': 'metric'
-            },
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            logger.error(f"API test failed: {response.status_code} - {response.text}")
-            return False
-            
-        data = response.json()
-        if 'city' not in data or 'list' not in data:
-            logger.error(f"Invalid API response structure: {data.keys()}")
-            return False
-            
-        return True
-        
-    except Exception as e:
-        logger.error(f"API connection test failed: {e}")
-        return False
-
-def check_internet_connection():
-    try:
-        socket.create_connection(("8.8.8.8", 53), timeout=5)
-        return True
-    except OSError:
-        return False
-
-if not check_internet_connection():
-    logger.critical("Нет подключения к интернету")
-    exit(1)
-
-def start_bot():
-    if not check_internet_connection():
-        logger.critical("Нет интернет-соединения")
-        return
 
     test_data = weather_api.get_forecast("London")
     if not test_data:
@@ -849,15 +781,9 @@ def start_bot():
 
     bot.polling()
 
-if __name__ == '__main__':
-    if not test_api_connection():
-        logger.critical("API connection test failed. Shutting down.")
-        exit(1)
-
 def check_rate_limit(chat_id):
     now = time.time()
     times = _user_msg_times[chat_id]
-    # удаляем старые
     _user_msg_times[chat_id] = [t for t in times if now-t < 60]
     if len(_user_msg_times[chat_id]) >= USER_RATE_LIMIT:
         return False
@@ -866,12 +792,17 @@ def check_rate_limit(chat_id):
 
 _cache_cleanup_counter = 0
 
+
 def send_main_menu(chat_id, lang):
+    settings = data_manager.get_user_settings(chat_id)
+    current_lang = settings.get('language', 'en')
+    
     safe_send_message(
         chat_id,
-        LANGUAGES[lang]['main_menu'],
+        LANGUAGES[current_lang]['main_menu'],
         reply_markup=create_main_keyboard(chat_id)
     )
+
 
 class WeatherCache:
     def __init__(self, ttl: int = 300):
@@ -879,7 +810,7 @@ class WeatherCache:
         self._lock = Lock()
         self._ttl = ttl
         self._last_cleanup = time.time()
-        self._cleanup_interval = 60  # Очистка каждую минуту
+        self._cleanup_interval = 60
         
     def get(self, key: tuple) -> Optional[dict]:
         now = time.time()
@@ -908,15 +839,13 @@ class WeatherCache:
             del self._cache[k]
         self._last_cleanup = now
 
-# Использование
 weather_cache = WeatherCache()
 
 def get_cached_weather(city, lang, api_func):
     key = (city.lower(), lang)
     data = weather_cache.get(key)
     if data:
-        return data
-        
+        return data   
     data = api_func(city, lang)
     if data:
         weather_cache.set(key, data)
@@ -949,7 +878,6 @@ def parse_utc_timezone(tz_str):
     except Exception:
         return None
 
-# -- Helper Functions --
 def get_weather_icon(description: str) -> str:
     return WEATHER_ICONS.get(description.lower(), '🌤️')
 
@@ -957,10 +885,7 @@ def create_main_keyboard(chat_id):
     try:
         settings = data_manager.get_user_settings(chat_id)
         lang = settings.get('language', 'en')
-        
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        
-        # Добавляем логирование для отладки
         logger.info(f"Creating keyboard for user {chat_id}")
         
         kb.row(
@@ -984,21 +909,18 @@ def safe_send_message(chat_id: int, text: str, **kwargs):
     except telebot.apihelper.ApiTelegramException as e:
         if e.result.status_code == 403:
             logger.info(f"User {chat_id} blocked the bot")
-            # Можно удалить пользователя из БД:
             data_manager.collection.delete_one({"chat_id": chat_id})
         else:
             logger.error(f"Send error: {e}")
     except Exception as e:
         logger.error(f"Unexpected send error: {e}")
 
-# -- Bot Handlers --
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     try:
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, "Too many requests. Please wait a moment before trying again.")
             return
-        # Устанавливаем дефолтные настройки
         defaults = {
             'notification_city': None,
             'notification_time': '08:00',
@@ -1011,7 +933,6 @@ def cmd_start(msg):
             if key not in current_settings:
                 data_manager.update_user_setting(msg.chat.id, key, value)
 
-        # Отправляем приветствие с кнопкой выбора языка
         lang_markup = types.InlineKeyboardMarkup()
         lang_markup.add(
             types.InlineKeyboardButton(
@@ -1032,10 +953,8 @@ def cmd_start(msg):
 @bot.callback_query_handler(func=lambda call: call.data == "show_lang_menu")
 def show_language_menu(call):
     try:
-        # Всегда используем английский для первоначального выбора языка
-        current_lang = 'en'  # Фиксированно английский
+        current_lang = 'en'
 
-        # рисуем список языков из словаря LANGUAGES
         kb = types.InlineKeyboardMarkup(row_width=2)
         for code, meta in LANGUAGES.items():
             kb.add(types.InlineKeyboardButton(
@@ -1043,12 +962,11 @@ def show_language_menu(call):
                 callback_data=f"initlang:{code}"
             ))
 
-        # редактируем прежнее сообщение (если нельзя — просто отправь новое)
         try:
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text="🌐 Choose your language:\n",  # Всегда на английском
+                text="🌐 Choose your language:\n", 
                 reply_markup=kb
             )
         except:
@@ -1069,27 +987,22 @@ def set_initial_language(call):
     try:
         lang = call.data.split(":", 1)[1]
         
-        # Проверяем, что выбранный язык существует
         if lang not in LANGUAGES:
             bot.answer_callback_query(call.id, "⚠️ Invalid language")
             return
             
         data_manager.update_user_setting(call.message.chat.id, 'language', lang)
 
-        # главное меню
         main_kb = create_main_keyboard(call.message.chat.id)
 
-        # клавиатура запроса геолокации
         geo_kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         geo_kb.add(types.KeyboardButton(LANGUAGES[lang]['send_location'], request_location=True))
 
-        # аккуратно обновляем UI
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except:
             pass
 
-        # Отправляем приветствие на выбранном языке
         bot.send_message(call.message.chat.id, LANGUAGES[lang]['welcome'], 
                         reply_markup=main_kb, parse_mode="Markdown")
         bot.send_message(call.message.chat.id, LANGUAGES[lang]['ask_location'], 
@@ -1138,7 +1051,6 @@ def notification_settings(call):
         
         markup = types.InlineKeyboardMarkup()
         
-        # Кнопка вкл/выкл уведомлений
         if settings.get('notifications', False):
             markup.add(types.InlineKeyboardButton(
                 LANGUAGES[lang]['disable_notifications'],
@@ -1150,13 +1062,11 @@ def notification_settings(call):
                 callback_data="toggle_notifications"
             ))
         
-        # Кнопка выбора города
         markup.add(types.InlineKeyboardButton(
             LANGUAGES[lang]['set_notification_city'],
             callback_data="choose_notification_city"
         ))
         
-        # Кнопка установки времени
         markup.add(types.InlineKeyboardButton(
             LANGUAGES[lang]['set_notification_time'],
             callback_data="set_notification_time"
@@ -1225,14 +1135,12 @@ def handle_location(msg):
         logger.info(f"Processing location from user {msg.chat.id}: lat={msg.location.latitude}, lon={msg.location.longitude}")
         
         try:
-            # Используем координаты для поиска города
             location = geolocator.reverse((msg.location.latitude, msg.location.longitude), exactly_one=True, timeout=15)
             if not location or not location.raw.get('address'):
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['location_city_not_found'])
                 return
 
             address = location.raw['address']
-            # Попробуем разные варианты названий населенных пунктов
             city_name = (address.get('city') or 
                         address.get('town') or 
                         address.get('village') or 
@@ -1245,23 +1153,19 @@ def handle_location(msg):
 
             logger.info(f"Found city from coordinates: {city_name}")
             
-            # Проверяем погоду для найденного города
             weather_data = weather_api.get_current_weather(city_name, lang)
             if not weather_data:
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['weather_not_found'])
                 return
 
-            # Нормализуем название города из API ответа
             final_city_name = weather_data.get('name', city_name)
             logger.info(f"Final city name from API: {final_city_name}")
 
-            # Добавляем город в сохраненные, если его там нет
             saved_cities = settings.get('saved_cities', [])
             if final_city_name not in saved_cities and len(saved_cities) < 15:
                 saved_cities.append(final_city_name)
                 data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
                 
-                # Если это первый город - делаем его городом для уведомлений
                 if len(saved_cities) == 1:
                     data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
                 
@@ -1269,8 +1173,6 @@ def handle_location(msg):
                     msg.chat.id,
                     LANGUAGES[lang]['city_added_success'].format(city=final_city_name)
                 )
-
-            # Отправляем текущую погоду с координатами для UV индекса
             send_current_weather(msg.chat.id, final_city_name, lang, 
                                lat=msg.location.latitude, 
                                lon=msg.location.longitude)
@@ -1364,7 +1266,6 @@ def show_chart_options(msg):
     markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
     bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_chart'], reply_markup=markup)
 
-# --- После show_chart_options ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chartcity_"))
 def handle_chart_city(call):
     city = call.data.split("_", 1)[1]
@@ -1666,7 +1567,7 @@ def request_new_city(call):
             LANGUAGES[lang]['enter_city'],
             reply_markup=markup
         )
-        bot.register_next_step_handler(msg, lambda m: process_new_city(m, city=None))
+        bot.register_next_step_handler(msg, process_new_city)
 
     except Exception as e:
         logger.error(f"Error in request_new_city: {e}")
@@ -1677,29 +1578,23 @@ def process_new_city(msg, city=None):
         settings = data_manager.get_user_settings(msg.chat.id)
         lang = settings.get('language', 'en')
         
-        # Добавляем проверку лимита сообщений
         if not check_rate_limit(msg.chat.id):
             safe_send_message(msg.chat.id, LANGUAGES[lang]['rate_limit_message'])
             return
         
-        if isinstance(city, str) or city is None:
-            if city is None:
-                if not msg.text or len(msg.text.strip()) > 100:
-                    logger.warning(f"Invalid city name: {msg.text if hasattr(msg, 'text') else 'No text'}")
-                    safe_send_message(msg.chat.id, LANGUAGES[lang]['city_not_found_try_english'])
-                    return
-                city_name = msg.text.strip()
-                
-                # Проверка на недопустимые символы
-                import re
-                if not re.match(r'^[a-zA-Zа-яА-Я\s\-\'\.]+$', city_name):
-                    safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_city_chars'])
-                    return
-                    
-            else:
-                city_name = city
+        if hasattr(msg, 'text') and msg.text and (city is None):
+            city_name = msg.text.strip()
+            
+            if len(city_name) > 100:
+                logger.warning(f"City name too long: {city_name}")
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['city_name_too_long'])
+                return
 
-            # Получаем данные о погоде для проверки существования города
+            import re
+            if not re.match(r'^[a-zA-Zа-яА-Я\s\-\'\.]+$', city_name):
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_city_chars'])
+                return
+                
             weather_data = weather_api.get_current_weather(city_name, lang)
             if not weather_data:
                 logger.warning(f"No weather data for city: {city_name}")
@@ -1715,10 +1610,18 @@ def process_new_city(msg, city=None):
                 logger.error(f"No city name in weather data for: {city_name}")
                 safe_send_message(msg.chat.id, LANGUAGES[lang]['error_getting_city_data'])
                 return
-
-        elif hasattr(city, 'latitude') and hasattr(city, 'longitude'):
+                
+        elif isinstance(city, str):
+            weather_data = weather_api.get_current_weather(city, lang)
+            if not weather_data:
+                logger.warning(f"No weather data for city: {city}")
+                safe_send_message(msg.chat.id, LANGUAGES[lang]['city_not_found_try_english'])
+                return
+            final_city_name = weather_data.get('name')
+            
+        elif hasattr(msg, 'location'):
             try:
-                location = geolocator.reverse((city.latitude, city.longitude), exactly_one=True, timeout=15)
+                location = geolocator.reverse((msg.location.latitude, msg.location.longitude), exactly_one=True, timeout=15)
                 if not location or not location.raw.get('address'):
                     safe_send_message(msg.chat.id, LANGUAGES[lang]['location_city_not_found'])
                     return
@@ -1751,18 +1654,15 @@ def process_new_city(msg, city=None):
             safe_send_message(msg.chat.id, LANGUAGES[lang]['invalid_data_format'])
             return
 
-        # Проверяем лимит сохраненных городов
         saved_cities = settings.get('saved_cities', [])
         if len(saved_cities) >= 15:
             safe_send_message(msg.chat.id, LANGUAGES[lang]['max_cities'])
             return
-
-        # Добавляем город, если его еще нет
+        
         if final_city_name not in saved_cities:
             saved_cities.append(final_city_name)
             data_manager.update_user_setting(msg.chat.id, 'saved_cities', saved_cities)
             
-            # Если это первый город - делаем его городом для уведомлений
             if len(saved_cities) == 1:
                 data_manager.update_user_setting(msg.chat.id, 'notification_city', final_city_name)
             
@@ -1778,7 +1678,6 @@ def process_new_city(msg, city=None):
                 reply_markup=types.ReplyKeyboardRemove()
             )
 
-        # Отправляем погоду и возвращаем в главное меню
         send_current_weather(msg.chat.id, final_city_name, lang)
         send_main_menu(msg.chat.id, lang)
 
@@ -1794,7 +1693,6 @@ def process_new_city(msg, city=None):
 @bot.message_handler(func=lambda message: message.text in [LANGUAGES[lang]['settings_button'] for lang in LANGUAGES])
 def show_settings(message):
     try:
-        # Добавим отладочный вывод
         logger.info(f"Received text: '{message.text}'")
         logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
         
@@ -1806,10 +1704,8 @@ def show_settings(message):
         lang = settings.get('language', 'en')
         saved_cities = settings.get('saved_cities', [])
 
-        # Создаем клавиатуру с настройками
         markup = types.InlineKeyboardMarkup(row_width=2)
-        
-        # Основные кнопки настроек
+
         markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], 
                                      callback_data="notifications_settings"),
@@ -1852,7 +1748,7 @@ def show_settings(message):
 def debug_settings(msg):
     logger.info(f"Debug: Settings-like message received: '{msg.text}'")
     logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
-    # Проверяем, совпадает ли текст с каким-либо вариантом кнопки настроек
+
     matches = [lang for lang in LANGUAGES if LANGUAGES[lang]['settings_button'] == msg.text]
     logger.info(f"Matching languages: {matches}")
 
@@ -1914,7 +1810,7 @@ def show_saved_cities_settings(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("remove_city_"))
 def remove_city_handler(call):
     try:
-        city = call.data[len("remove_city_"):]  # Корректно для названий городов с "_"
+        city = call.data[len("remove_city_"):]
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
         saved_cities = settings.get('saved_cities', [])
@@ -1923,7 +1819,6 @@ def remove_city_handler(call):
             saved_cities.remove(city)
             data_manager.update_user_setting(call.message.chat.id, 'saved_cities', saved_cities)
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['city_removed'].format(city=city))
-            # Обновить список городов после удаления
             show_saved_cities_settings(call)
         else:
             safe_send_message(call.message.chat.id, LANGUAGES[lang]['not_found'])
@@ -1958,10 +1853,14 @@ def set_language_handler(call):
         new_lang = call.data.split(":", 1)[1]
         data_manager.update_user_setting(call.message.chat.id, 'language', new_lang)
 
-        # лёгкая тост-нотификация и возврат в настройки
         bot.answer_callback_query(call.id, LANGUAGES[new_lang]['language_changed'])
+        main_kb = create_main_keyboard(call.message.chat.id)
+        bot.send_message(
+            call.message.chat.id, 
+            LANGUAGES[new_lang]['main_menu'], 
+            reply_markup=main_kb
+        )
 
-        # перерисовываем экран настроек (используй готовую функцию)
         handle_back_to_settings(call)
     except Exception as e:
         logger.error(f"Language error: {e}")
@@ -2006,7 +1905,6 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None)
             safe_send_message(chat_id, LANGUAGES[lang]['not_found'])
             return
 
-        # 2. Формируем основное сообщение с текущей погодой
         try:
             temp = round(current_weather['main']['temp'])
             feels_like = round(current_weather['main']['feels_like'])
@@ -2038,17 +1936,14 @@ def send_current_weather(chat_id, city, lang, lat=None, lon=None, date_str=None)
             safe_send_message(chat_id, LANGUAGES[lang]['error'].format(error="Data structure error"))
             return
 
-        # 3. Получаем данные прогноза для графика
         forecast_data = weather_api.get_forecast(city, lang)
         if not forecast_data or 'list' not in forecast_data:
             logger.error(f"Invalid forecast data structure: {list(forecast_data.keys()) if forecast_data else 'None'}")
             return
 
-        # Если дата не передана — используем сегодня
         if date_str is None:
             date_str = datetime.now().strftime('%Y-%m-%d')
 
-        # 4. Создаем и отправляем график
         try:
             chart_buffer = ChartGenerator.create_weather_chart_for_day(forecast_data, city, lang, date_str)
             if chart_buffer:
@@ -2099,7 +1994,7 @@ def get_wind_direction(degrees, lang='en'):
         directions = ['↓ С', '↙ СВ', '← В', '↖ ЮВ', '↑ Ю', '↗ ЮЗ', '→ З', '↘ СЗ']
     elif lang == 'uk':
         directions = ['↓ Пн', '↙ ПнСх', '← Сх', '↖ ПдСх', '↑ Пд', '↗ ПдЗх', '→ Зх', '↘ ПнЗх']
-    else:  # en
+    else:
         directions = ['↓ N', '↙ NE', '← E', '↖ SE', '↑ S', '↗ SW', '→ W', '↘ NW']
     
     return directions[round(degrees / 45) % 8] if degrees is not None else ""
@@ -2117,7 +2012,7 @@ def send_forecast(chat_id: int, city: str, lang: str):
 
         message = "\n\n" + LANGUAGES[lang]['hourly_forecast'] + "\n"
 
-        for i, item in enumerate(forecast_data['list'][:8]):  # 8 записей = ~24 часа
+        for i, item in enumerate(forecast_data['list'][:8]):
             dt = datetime.fromtimestamp(item['dt'])
             hour = dt.strftime('%H')
             temp = round(item['main']['temp'])
@@ -2143,7 +2038,6 @@ def send_notifications():
         utc_now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         logger.debug(f"[NOTIFICATIONS] Current UTC time: {utc_now}")
 
-        # Находим пользователей с включенными уведомлениями
         users = data_manager.collection.find({
             'notifications': True,
             'saved_cities': {'$exists': True, '$ne': []}
@@ -2160,12 +2054,10 @@ def send_notifications():
                 settings = data_manager.get_user_settings(chat_id)
                 lang = settings.get('language', 'en')
 
-                # Двойная проверка настроек (могли измениться)
                 if not settings.get('notifications', False) or not settings.get('saved_cities'):
                     logger.debug(f"[NOTIFICATIONS] User {chat_id} notifications disabled or no cities")
                     continue
 
-                # Обработка часового пояса
                 timezone_str = settings.get('timezone', 'UTC')
                 try:
                     offset = parse_utc_timezone(timezone_str)
@@ -2179,26 +2071,22 @@ def send_notifications():
 
                 user_now = utc_now.astimezone(user_tz)
                 today_str = user_now.strftime('%Y-%m-%d')
-                
-                # Проверяем время уведомления
+
                 notification_time = settings.get('notification_time', '08:00')
                 try:
                     notif_hour, notif_minute = map(int, notification_time.split(':'))
                 except ValueError:
                     logger.warning(f"[NOTIFICATIONS] Invalid time format {notification_time} for user {chat_id}")
                     notif_hour, notif_minute = 8, 0
-                
-                # Проверяем, пришло ли время для уведомления
+
                 if (user_now.hour, user_now.minute) != (notif_hour, notif_minute):
                     continue
                 
-                # Проверяем, не отправляли ли уже сегодня
                 last_sent = settings.get('last_notification_date')
                 if last_sent == today_str:
                     logger.debug(f"[NOTIFICATIONS] Already sent to {chat_id} today")
                     continue
                 
-                # Определяем город для уведомления
                 notification_city = settings.get('notification_city')
                 saved_cities = settings.get('saved_cities', [])
                 
@@ -2210,15 +2098,12 @@ def send_notifications():
                     logger.warning(f"[NOTIFICATIONS] No valid city for user {chat_id}")
                     continue
 
-                # Определяем дату прогноза (завтра)
                 tomorrow_date = (user_now + timedelta(days=1)).strftime('%Y-%m-%d')
                 
                 logger.info(f"[NOTIFICATIONS] Sending to {chat_id} for {city} ({tomorrow_date}) at {notification_time}")
-                
-                # Отправляем прогноз
+            
                 send_forecast_for_date(chat_id, city, lang, tomorrow_date)
                 
-                # Обновляем дату последней отправки
                 data_manager.update_user_setting(chat_id, 'last_notification_date', today_str)
                 notification_count += 1
                 
@@ -2232,7 +2117,53 @@ def send_notifications():
         
     except Exception as e:
         logger.critical(f"[NOTIFICATIONS] System error: {str(e)}", exc_info=True)
+
+def show_settings_inline(call):
+    try:
+        settings = data_manager.get_user_settings(call.message.chat.id)
+        lang = settings.get('language', 'en')
+        saved_cities = settings.get('saved_cities', [])
+
+        markup = types.InlineKeyboardMarkup(row_width=2)
+
+        markup.add(
+            types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], 
+                                     callback_data="notifications_settings"),
+            types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], 
+                                     callback_data="language_settings")
+        )
         
+        markup.add(
+            types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], 
+                                     callback_data="timezone_settings")
+        )
+
+        if saved_cities:
+            markup.add(
+                types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'],
+                                         callback_data="show_saved_cities_settings")
+            )
+
+        settings_text = LANGUAGES[lang]['settings_menu'].format(
+            notifications=LANGUAGES[lang]['on'] if settings.get('notifications', False) else LANGUAGES[lang]['off'],
+            time=settings.get('notification_time', '--:--'),
+            lang=LANGUAGES[lang]['language_name'],
+            cities=len(saved_cities),
+            timezone=settings.get('timezone', 'UTC')
+        )
+        
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=settings_text,
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+
+    except Exception as e:
+        logger.error(f"Error in show_settings_inline: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки настроек")
+
 def notification_scheduler():
     print("📡 Notification scheduler started.")
     schedule.every().minute.do(send_notifications)
@@ -2255,7 +2186,7 @@ def toggle_notifications(call):
         lang = settings['language']
         status = LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off']
         safe_send_message(call.message.chat.id, LANGUAGES[lang]['notifications_status'].format(status=status))
-        show_settings(call.message)  # Обновить меню
+        show_settings(call.message)
     except Exception as e:
         logger.error(f"Error in toggle_notifications: {e}")
 
@@ -2378,7 +2309,6 @@ def handle_text(message):
         settings = data_manager.get_user_settings(message.chat.id)
         lang = settings.get('language', 'en')
         
-        # Проверяем, является ли сообщение командой или кнопкой меню
         menu_buttons = set()
         for language in LANGUAGES.values():
             menu_buttons.update([
@@ -2392,19 +2322,16 @@ def handle_text(message):
                 language.get('main_menu', '')
             ])
         
-        # Если это кнопка меню - игнорируем (обработается соответствующим хендлером)
         if message.text in menu_buttons:
             logger.debug(f"Menu button detected, skipping: {message.text}")
             return
         
-        # Проверяем команды
         if message.text.startswith('/'):
             logger.debug(f"Command detected, skipping: {message.text}")
             return
             
         logger.info(f"Processing city name: {message.text} from user {message.chat.id}")
         
-        # Обрабатываем как название города
         process_new_city(message)
         
     except Exception as e:
@@ -2425,8 +2352,8 @@ def debug_log_all_messages(message):
 from flask import Flask, request
 import os
 
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")  # например, https://your-app.onrender.com
-WEBHOOK_PATH = ""  # всегда пусто, чтобы был '/'
+WEBHOOK_HOST = os.getenv("WEBHOOK_HOST")
+WEBHOOK_PATH = ""
 WEBHOOK_URL = f"{WEBHOOK_HOST}/"
 
 app = Flask(__name__)
