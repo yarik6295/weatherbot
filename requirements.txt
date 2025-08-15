@@ -9,3 +9,4 @@ timezonefinder
 matplotlib
 urllib3
 pymongo
+typing
