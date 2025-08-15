@@ -1301,9 +1301,6 @@ def handle_back_to_settings(call):
             types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings"),
             types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
         )
-        markup.row(
-            types.InlineKeyboardButton(LANGUAGES[lang]['back_button'], callback_data="back_to_main")
-        )
 
         bot.edit_message_text(
             chat_id=call.message.chat.id,
@@ -1340,54 +1337,7 @@ def handle_back_to_main(call):
         )
         
     except Exception as e:
-        logger.error(f"Back to main error: {e}")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('set_lang_'))
-def set_language_handler(call):
-    try:
-        lang = call.data.split('_')[2]
-        data_manager.update_user_setting(call.message.chat.id, 'language', lang)
-        
-        # Удаляем сообщение с выбором языка
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        
-        # Показываем приветствие с инструкциями
-        geo_markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        geo_markup.add(
-            types.KeyboardButton(
-                LANGUAGES[lang]['send_location'],
-                request_location=True
-            )
-        )
-        
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.send_message(
-            call.message.chat.id,
-            LANGUAGES[lang]['welcome'],
-            parse_mode="Markdown",
-            reply_markup=geo_markup
-        )
-        
-        bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
-        
-    except Exception as e:
-        logger.error(f"Language error: {e}")
-        bot.answer_callback_query(call.id, "⚠️ Ошибка")       
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
-def set_language(call):
-    try:
-        lang_code = call.data.split('_')[1]
-        data_manager.update_user_setting(call.message.chat.id, 'language', lang_code)
-        
-        safe_send_message(
-            call.message.chat.id,
-            LANGUAGES[lang_code]['ask_location'],
-            reply_markup=create_main_keyboard(lang_code)
-        )
-        bot.answer_callback_query(call.id)
-    except Exception as e:
-        logger.error(f"Error in set_language: {e}")
+        logger.error(f"Back to main error: {e}")     
 
 @bot.callback_query_handler(func=lambda call: call.data == "notifications_settings")
 def notification_settings(call):
@@ -2178,15 +2128,6 @@ def set_language_handler(call):
         logger.error(f"Language error: {e}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка")
 
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("set_lang_"))
-def set_language(call):
-    lang = call.data.split("_")[2]
-    data_manager.update_user_setting(call.message.chat.id, 'language', lang)
-    
-    bot.answer_callback_query(call.id, LANGUAGES[lang]['language_changed'])
-    show_settings(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "timezone_settings")
 def handle_timezone_settings(call):
