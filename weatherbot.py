@@ -1000,21 +1000,48 @@ def set_initial_language(call):
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_settings")
 def handle_back_to_settings(call):
     try:
-        saved_cities = settings.get('saved_cities', [])
         settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
         
-        markup = types.InlineKeyboardMarkup()
-        markup.row(
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['notifications_tab'], callback_data="notifications_settings"),
             types.InlineKeyboardButton(LANGUAGES[lang]['language_tab'], callback_data="language_settings")
         )
-        markup.row(
+        markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['timezone_button'], callback_data="timezone_settings"),
         )    
-        markup.row(
+        markup.add(
             types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'], callback_data="show_saved_cities_settings")
         )
+        
+        settings_text = LANGUAGES[lang]['settings_menu'].format(
+            notifications=LANGUAGES[lang]['on'] if settings.get('notifications', False) else LANGUAGES[lang]['off'],
+            time=settings.get('notification_time', '--:--'),
+            lang=LANGUAGES[lang]['language_name'],
+            cities=len(saved_cities),
+            timezone=settings.get('timezone', 'UTC')
+        )
+        
+        try:
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=settings_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+        except Exception as edit_error:
+            logger.warning(f"Could not edit message, sending new one: {edit_error}")
+            bot.send_message(
+                chat_id=call.message.chat.id,
+                text=settings_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+        
+        bot.answer_callback_query(call.id)
         
     except Exception as e:
         logger.error(f"Back error: {e}")
@@ -1054,14 +1081,26 @@ def notification_settings(call):
             callback_data="back_to_settings"
         ))
         
-        bot.edit_message_text(
-            LANGUAGES[lang]['notification_settings'],
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup
-        )
+        try:
+            bot.edit_message_text(
+                LANGUAGES[lang]['notification_settings'],
+                call.message.chat.id,
+                call.message.message_id,
+                reply_markup=markup
+            )
+        except Exception as edit_error:
+            logger.warning(f"Could not edit message in notification_settings: {edit_error}")
+            bot.send_message(
+                call.message.chat.id,
+                LANGUAGES[lang]['notification_settings'],
+                reply_markup=markup
+            )
+            
+        bot.answer_callback_query(call.id)
+        
     except Exception as e:
         logger.error(f"Error in notification_settings: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
 
 @bot.callback_query_handler(func=lambda call: call.data == "choose_notification_city")
 def choose_notification_city(call):
@@ -1201,47 +1240,105 @@ def handle_share_button(msg):
         logger.error(f"Share error: {e}")
         bot.send_message(msg.chat.id, "⚠️ Произошла ошибка при создании ссылки")
 
-@bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['cities_button'] for lang in LANGUAGES.keys()))
-def show_saved_cities(msg):
+@bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
+def show_saved_cities_settings(call):
     try:
-        if not check_rate_limit(msg.chat.id):
-            safe_send_message(msg.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
-            return
-        settings = data_manager.get_user_settings(msg.chat.id)
+        settings = data_manager.get_user_settings(call.message.chat.id)
         lang = settings['language']
-        
         saved_cities = settings.get('saved_cities', [])
+
+        markup = types.InlineKeyboardMarkup()
+
         if not saved_cities:
-            safe_send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
+            markup.add(types.InlineKeyboardButton(
+                LANGUAGES[lang]['back_button'],
+                callback_data="back_to_settings"
+            ))
+            
+            try:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=LANGUAGES[lang]['no_cities_text'],
+                    reply_markup=markup
+                )
+            except Exception as edit_error:
+                logger.warning(f"Could not edit message in show_saved_cities_settings: {edit_error}")
+                bot.send_message(
+                    call.message.chat.id,
+                    LANGUAGES[lang]['no_cities_text'],
+                    reply_markup=markup
+                )
+            bot.answer_callback_query(call.id)
             return
-        
-        markup = types.InlineKeyboardMarkup(row_width=2)
+
         for city in saved_cities:
-            markup.add(
-                types.InlineKeyboardButton(f"🌤️ {city}", callback_data=f"weather_{city}"),
-                types.InlineKeyboardButton("🗑️", callback_data=f"remove_city_{city}")
+            markup.row(
+                types.InlineKeyboardButton(
+                    f"{city}",
+                    callback_data=f"weather_{city}"
+                ),
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['remove_city_btn'],
+                    callback_data=f"remove_city_{city}"
+                ),
+                types.InlineKeyboardButton(
+                    LANGUAGES[lang]['forecast_city_btn'],
+                    callback_data=f"forecast_{city}"
+                )
             )
-        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
-        
-        safe_send_message(
-            msg.chat.id,
-            LANGUAGES[lang]['saved_cities'],
-            reply_markup=markup
-        )
+
+        markup.add(types.InlineKeyboardButton(
+            LANGUAGES[lang]['back_button'],
+            callback_data="back_to_settings"
+        ))
+
+        try:
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=LANGUAGES[lang]['saved_cities_title'] + f"\n\n{LANGUAGES[lang]['saved_cities_count'].format(len(saved_cities))}",
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+        except Exception as edit_error:
+            logger.warning(f"Could not edit message in show_saved_cities_settings: {edit_error}")
+            bot.send_message(
+                call.message.chat.id,
+                LANGUAGES[lang]['saved_cities_title'] + f"\n\n{LANGUAGES[lang]['saved_cities_count'].format(len(saved_cities))}",
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+
+        bot.answer_callback_query(call.id)
+
     except Exception as e:
-        logger.error(f"Error in show_saved_cities: {e}")
+        logger.error(f"Error in show_saved_cities_settings: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка загрузки списка городов")
+
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['chart_button'] for lang in LANGUAGES.keys()))
 def show_chart_options(msg):
-    settings = data_manager.get_user_settings(msg.chat.id)
-    lang = settings['language']
-    saved_cities = settings.get('saved_cities', [])
-    cities = saved_cities
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    for city in cities:
-        markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
-    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
-    bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_chart'], reply_markup=markup)
+    try:
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        
+        if not saved_cities:
+            bot.send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
+            return
+            
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for city in saved_cities:
+            markup.add(types.InlineKeyboardButton(f"📊 {city}", callback_data=f"chartcity_{city}"))
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
+        
+        # Отправляем новое сообщение с меню
+        bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_chart'], reply_markup=markup)
+        
+    except Exception as e:
+        logger.error(f"Error in show_chart_options: {e}")
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chartcity_"))
 def handle_chart_city(call):
@@ -1317,17 +1414,26 @@ def handle_forecast_city(call):
 
 @bot.message_handler(func=lambda m: m.text and any(m.text == LANGUAGES[lang]['forecast_button'] for lang in LANGUAGES.keys()))
 def show_forecast_options(msg):
-    settings = data_manager.get_user_settings(msg.chat.id)
-    lang = settings['language']
-    saved_cities = settings.get('saved_cities', [])
-    if not saved_cities:
-        bot.send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
-        return
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    for city in saved_cities:
-        markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
-    markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
-    bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_forecast'], reply_markup=markup)
+    try:
+        settings = data_manager.get_user_settings(msg.chat.id)
+        lang = settings['language']
+        saved_cities = settings.get('saved_cities', [])
+        
+        if not saved_cities:
+            bot.send_message(msg.chat.id, LANGUAGES[lang]['no_saved_cities'])
+            return
+            
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        for city in saved_cities:
+            markup.add(types.InlineKeyboardButton(f"🌦️ {city}", callback_data=f"forecastcity_{city}"))
+        markup.add(types.InlineKeyboardButton(LANGUAGES[lang]['add_city'], callback_data="add_city"))
+        
+        # Удаляем предыдущие сообщения с меню, отправляя новое
+        bot.send_message(msg.chat.id, LANGUAGES[lang]['select_city_forecast'], reply_markup=markup)
+        
+    except Exception as e:
+        logger.error(f"Error in show_forecast_options: {e}")
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("forecastdate_"))
 def handle_forecast_date(call):
@@ -1798,21 +1904,35 @@ def remove_city_handler(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "language_settings")
 def show_languages(call):
-    user_lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
+    try:
+        user_lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
 
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    for code, meta in LANGUAGES.items():
-        kb.add(types.InlineKeyboardButton(meta.get('language_name', 'code.upper'),
-                                          callback_data=f"setlang:{code}"))
-    kb.add(types.InlineKeyboardButton(LANGUAGES[user_lang]['back_button'], callback_data="back_to_settings"))
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        for code, meta in LANGUAGES.items():
+            kb.add(types.InlineKeyboardButton(meta.get('language_name', code.upper()),
+                                              callback_data=f"setlang:{code}"))
+        kb.add(types.InlineKeyboardButton(LANGUAGES[user_lang]['back_button'], callback_data="back_to_settings"))
 
-    bot.edit_message_text(
-        LANGUAGES[user_lang]['language_title'],
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=kb
-    )
-    bot.answer_callback_query(call.id)
+        try:
+            bot.edit_message_text(
+                LANGUAGES[user_lang]['language_title'],
+                call.message.chat.id,
+                call.message.message_id,
+                reply_markup=kb
+            )
+        except Exception as edit_error:
+            logger.warning(f"Could not edit message in show_languages: {edit_error}")
+            bot.send_message(
+                call.message.chat.id,
+                LANGUAGES[user_lang]['language_title'],
+                reply_markup=kb
+            )
+            
+        bot.answer_callback_query(call.id)
+        
+    except Exception as e:
+        logger.error(f"Language settings error: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("setlang:"))
@@ -1822,6 +1942,7 @@ def set_language_handler(call):
         data_manager.update_user_setting(call.message.chat.id, 'language', new_lang)
 
         bot.answer_callback_query(call.id, LANGUAGES[new_lang]['language_changed'])
+        
         main_kb = create_main_keyboard(call.message.chat.id)
         bot.send_message(
             call.message.chat.id, 
@@ -1829,7 +1950,8 @@ def set_language_handler(call):
             reply_markup=main_kb
         )
 
-        handle_back_to_settings(call)
+        show_settings_inline(call)
+        
     except Exception as e:
         logger.error(f"Language error: {e}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка")
@@ -1837,14 +1959,31 @@ def set_language_handler(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == "timezone_settings")
 def handle_timezone_settings(call):
-    lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
-    markup = generate_utc_timezone_keyboard(lang)
-    bot.edit_message_text(
-        LANGUAGES[lang]['choose_timezone'],
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=markup
-    )
+    try:
+        lang = data_manager.get_user_settings(call.message.chat.id).get('language', 'en')
+        markup = generate_utc_timezone_keyboard(lang)
+        
+        try:
+            bot.edit_message_text(
+                LANGUAGES[lang]['choose_timezone'],
+                call.message.chat.id,
+                call.message.message_id,
+                reply_markup=markup
+            )
+        except Exception as edit_error:
+            logger.warning(f"Could not edit message in timezone_settings: {edit_error}")
+            bot.send_message(
+                call.message.chat.id,
+                LANGUAGES[lang]['choose_timezone'],
+                reply_markup=markup
+            )
+            
+        bot.answer_callback_query(call.id)
+        
+    except Exception as e:
+        logger.error(f"Error in timezone_settings: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_timezone_UTC"))
 def set_utc_timezone(call):
@@ -2147,16 +2286,21 @@ def notification_scheduler():
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_notifications")
 def toggle_notifications(call):
     try:
-        bot.answer_callback_query(call.id)
         settings = data_manager.get_user_settings(call.message.chat.id)
-        settings['notifications'] = not settings['notifications']
-        data_manager.update_user_setting(call.message.chat.id, 'notifications', settings['notifications'])
+        new_notifications_state = not settings.get('notifications', False)
+        data_manager.update_user_setting(call.message.chat.id, 'notifications', new_notifications_state)
+        
         lang = settings['language']
-        status = LANGUAGES[lang]['on'] if settings['notifications'] else LANGUAGES[lang]['off']
-        safe_send_message(call.message.chat.id, LANGUAGES[lang]['notifications_status'].format(status=status))
-        show_settings(call.message)
+        status = LANGUAGES[lang]['on'] if new_notifications_state else LANGUAGES[lang]['off']
+        
+        bot.answer_callback_query(call.id, LANGUAGES[lang]['notifications_status'].format(status=status))
+        
+        # Возвращаемся в меню уведомлений
+        notification_settings(call)
+        
     except Exception as e:
         logger.error(f"Error in toggle_notifications: {e}")
+        bot.answer_callback_query(call.id, "⚠️ Ошибка")
 
 @bot.callback_query_handler(func=lambda call: call.data == "set_notification_time")
 def request_notification_time(call):
