@@ -1313,32 +1313,6 @@ def handle_back_to_settings(call):
         logger.error(f"Back error: {e}")
         bot.answer_callback_query(call.id, "⚠️ Ошибка")
 
-@bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
-def handle_back_to_main(call):
-    try:
-        lang = data_manager.get_user_settings(call.message.chat.id)['language']
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        
-        # Показываем главное меню
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.row(
-            types.KeyboardButton(LANGUAGES[lang]['forecast_button']),
-            types.KeyboardButton(LANGUAGES[lang]['chart_button'])
-        )
-        markup.row(
-            types.KeyboardButton(LANGUAGES[lang]['settings_button']),
-            types.KeyboardButton(LANGUAGES[lang]['share_button'])
-        )
-        
-        bot.send_message(
-            call.message.chat.id,
-            "Выберите действие:",
-            reply_markup=markup
-        )
-        
-    except Exception as e:
-        logger.error(f"Back to main error: {e}")     
-
 @bot.callback_query_handler(func=lambda call: call.data == "notifications_settings")
 def notification_settings(call):
     try:
@@ -1983,11 +1957,6 @@ def show_settings(message):
                 types.InlineKeyboardButton(LANGUAGES[lang]['saved_cities_title'],
                                          callback_data="show_saved_cities_settings")
             )
-
-        markup.add(
-            types.InlineKeyboardButton(LANGUAGES[lang]['back_button'],
-                                     callback_data="back_to_main")
-        )
 
         settings_text = LANGUAGES[lang]['settings_menu'].format(
             notifications="вкл" if settings.get('notifications', False) else "выкл",
