@@ -282,7 +282,7 @@ LANGUAGES = {
         'settings_menu': "⚙️ *Settings*\n\n🔔 Notifications: {notifications}\n🕐 Time: {time}\n🌐 Language: {lang}\n🏙️ Saved cities: {cities}\n🕒 🌍 Timezone: {timezone}",
         'choose_notification_city_button': "🌆 Notification city: {city}",
         'choose_notification_city': "🌆 Choose a city for daily notifications:",
-        'timezone_button': "🌍 Change timezone",
+        'timezone_button': "🌍 Timezone",
         'on': "on",
         'off': "off",
         'notifications_status': "🔔 Notifications {status}",
@@ -408,7 +408,7 @@ LANGUAGES = {
         'settings_menu': "⚙️ *Налаштування*\n\n🔔 Сповіщення: {notifications}\n🕐 Час: {time}\n🌐 Мова: {lang}\n🏙️ Збережено міст: {cities}\n🕒 🌍 Часовий пояс: {timezone}",
         'choose_notification_city_button': "🌆 Місто для сповіщень: {city}",
         'choose_notification_city': "🌆 Оберіть місто для щоденних сповіщень:",
-        'timezone_button': "🌍 Змінити часовий пояс",
+        'timezone_button': "🌍 Часовий пояс",
         'on': "увімкнено",
         'off': "вимкнено",
         'notifications_status': "🔔 Сповіщення {status}",
@@ -1276,9 +1276,9 @@ def set_initial_language(call):
         except:
             pass
 
-        bot.send_message(call.message.chat.id, LANGUAGES[lang]['language_changed'])
-        bot.send_message(call.message.chat.id, LANGUAGES[lang]['ask_location'], reply_markup=geo_kb)
         bot.send_message(call.message.chat.id, LANGUAGES[lang]['welcome'], reply_markup=main_kb)
+        bot.send_message(call.message.chat.id, LANGUAGES[lang]['ask_location'], reply_markup=geo_kb)
+        
 
         bot.answer_callback_query(call.id)
     except Exception as e:
