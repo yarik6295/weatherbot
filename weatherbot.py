@@ -1677,7 +1677,6 @@ def process_new_city(msg, city=None):
 def show_settings(message):
     try:
         logger.info(f"Received text: '{message.text}'")
-        logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
         
         if not check_rate_limit(message.chat.id):
             safe_send_message(message.chat.id, "Вы отправляете слишком много сообщений. Попробуйте позже.")
@@ -1726,14 +1725,6 @@ def show_settings(message):
         logger.error(f"Error in show_settings: {e}")
         logger.exception("Full traceback:")
         safe_send_message(message.chat.id, "⚠️ Ошибка загрузки настроек")
-
-@bot.message_handler(func=lambda m: m.text and '⚙️' in m.text)
-def debug_settings(msg):
-    logger.info(f"Debug: Settings-like message received: '{msg.text}'")
-    logger.info(f"Expected settings buttons: {[LANGUAGES[lang]['settings_button'] for lang in LANGUAGES]}")
-
-    matches = [lang for lang in LANGUAGES if LANGUAGES[lang]['settings_button'] == msg.text]
-    logger.info(f"Matching languages: {matches}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_saved_cities_settings")
 def show_saved_cities_settings(call):
